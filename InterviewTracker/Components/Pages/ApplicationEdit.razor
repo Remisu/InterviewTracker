@@ -1,0 +1,409 @@
+@page "/applications/new"
+@page "/applications/{Id:int}/edit"
+@inject ApplicationService AppService
+@inject TechnologyService TechService
+@inject NavigationManager Nav
+
+<PageTitle>@(_isNew ? "New Application" : "Edit Application")</PageTitle>
+
+<div class="page-header">
+    <h1>
+        <i class="bi bi-file-earmark-plus me-2"></i>
+        @(_isNew ? "New Application" : $"Edit — {_app.JobTitle}")
+    </h1>
+    @if (!_isNew)
+    {
+        <a href="/applications/@Id" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-eye me-1"></i>View Detail
+        </a>
+    }
+</div>
+
+@if (_pageLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></div>
+}
+else
+{
+    <EditForm Model="_app" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+
+        @* ── Section: Core info ── *@
+        <div class="it-card mb-3">
+            <h6 class="fw-bold mb-3">Position</h6>
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label small fw-semibold">Job Title *</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.JobTitle" />
+                    <ValidationMessage For="() => _app.JobTitle" class="text-danger small" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Employment Type</label>
+                    <InputSelect class="form-select form-select-sm" @bind-Value="_app.EmploymentType">
+                        @foreach (var et in EnumHelper.AllEmploymentTypes())
+                        {
+                            <option value="@et">@EnumHelper.DisplayName(et)</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Priority</label>
+                    <InputSelect class="form-select form-select-sm" @bind-Value="_app.Priority">
+                        @foreach (var p in EnumHelper.AllPriorities())
+                        {
+                            <option value="@p">@EnumHelper.DisplayName(p)</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Stage</label>
+                    <InputSelect class="form-select form-select-sm" @bind-Value="_app.Stage">
+                        @foreach (var s in EnumHelper.AllStages())
+                        {
+                            <option value="@s">@EnumHelper.DisplayName(s)</option>
+                        }
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="row g-3 mt-1">
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Job URL</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.JobUrl" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Job Reference / ID</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.JobReference" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Date Applied</label>
+                    <InputDate class="form-control form-control-sm" @bind-Value="_app.AppliedDate" />
+                </div>
+            </div>
+        </div>
+
+        @* ── Section: Company ── *@
+        <div class="it-card mb-3">
+            <h6 class="fw-bold mb-3">Company</h6>
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label small fw-semibold">Client Company *</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.ClientCompany" />
+                    <ValidationMessage For="() => _app.ClientCompany" class="text-danger small" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small fw-semibold">
+                        Recruiting Company
+                        <span class="text-muted fw-normal">(if different from client)</span>
+                    </label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.RecruitingCompany" />
+                </div>
+            </div>
+        </div>
+
+        @* ── Section: Location ── *@
+        <div class="it-card mb-3">
+            <h6 class="fw-bold mb-3">Location</h6>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">City</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.City" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Country</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.Country" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Work Mode</label>
+                    <InputSelect class="form-select form-select-sm" @bind-Value="_app.WorkMode">
+                        @foreach (var wm in EnumHelper.AllWorkModes())
+                        {
+                            <option value="@wm">@EnumHelper.DisplayName(wm)</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-2">
+                    <div class="form-check mt-4">
+                        <InputCheckbox class="form-check-input" @bind-Value="_app.RelocationRequired" id="relocation" />
+                        <label class="form-check-label small" for="relocation">Relocation Required</label>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="form-check mt-4">
+                        <InputCheckbox class="form-check-input" @bind-Value="_app.VisaSponsorshipAvailable" id="visa" />
+                        <label class="form-check-label small" for="visa">Visa Sponsorship</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ── Section: Compensation ── *@
+        <div class="it-card mb-3">
+            <h6 class="fw-bold mb-3">Compensation</h6>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Salary Min</label>
+                    <InputNumber class="form-control form-control-sm" @bind-Value="_app.SalaryMin" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Salary Max</label>
+                    <InputNumber class="form-control form-control-sm" @bind-Value="_app.SalaryMax" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Currency</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.Currency" placeholder="JPY" />
+                </div>
+            </div>
+        </div>
+
+        @* ── Section: Language ── *@
+        <div class="it-card mb-3">
+            <h6 class="fw-bold mb-3">Language Requirements</h6>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Japanese Level Required</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.JapaneseLevelRequired"
+                               placeholder="e.g. JLPT N2, Business" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">English Level Required</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_app.EnglishLevelRequired"
+                               placeholder="e.g. Business, Native" />
+                </div>
+            </div>
+        </div>
+
+        @* ── Section: Follow-up & Notes ── *@
+        <div class="it-card mb-3">
+            <h6 class="fw-bold mb-3">Notes & Follow-up</h6>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Next Follow-up Date</label>
+                    <InputDate class="form-control form-control-sm" @bind-Value="_app.NextFollowUpDate" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Notes</label>
+                    <InputTextArea class="form-control form-control-sm" rows="3" @bind-Value="_app.Notes" />
+                </div>
+            </div>
+        </div>
+
+        @* ── Section: Job Description ── *@
+        <div class="it-card mb-3">
+            <h6 class="fw-bold mb-3">Job Description</h6>
+            <InputTextArea class="form-control form-control-sm" rows="5" @bind-Value="_app.JobDescription" />
+        </div>
+
+        <div class="d-flex gap-2 mb-4">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1"></i>@(_isNew ? "Create Application" : "Save Changes")
+            </button>
+            <a href="/applications" class="btn btn-secondary">Cancel</a>
+        </div>
+
+        @if (_saveError is not null)
+        {
+            <div class="alert alert-danger py-2 small">@_saveError</div>
+        }
+    </EditForm>
+
+    @* ── Tech Requirements — only visible after the app has been saved ── *@
+    @if (!_isNew)
+    {
+        <div class="it-card mb-3">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0">Technology Requirements</h6>
+                <button class="btn btn-outline-primary btn-sm" @onclick="ToggleAddReq">
+                    <i class="bi bi-plus-lg me-1"></i>Add Requirement
+                </button>
+            </div>
+
+            @if (_reqFormVisible)
+            {
+                <div class="border rounded p-3 mb-3 bg-light">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Technology *</label>
+                            <select class="form-select form-select-sm" @bind="_reqTechId">
+                                <option value="0">— Select —</option>
+                                @foreach (var t in _availableTechs)
+                                {
+                                    <option value="@t.Id">@t.Name</option>
+                                }
+                            </select>
+                            @if (_reqError is not null)
+                            {
+                                <div class="text-danger small">@_reqError</div>
+                            }
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold">Years Exp.</label>
+                            <input type="number" class="form-control form-control-sm" min="0" max="30" step="0.5"
+                                   @bind="_reqYears" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Level</label>
+                            <select class="form-select form-select-sm" @bind="_reqLevel">
+                                @foreach (var l in EnumHelper.AllRequirementLevels())
+                                {
+                                    <option value="@l">@EnumHelper.DisplayName(l)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" id="mandatory" @bind="_reqMandatory" />
+                                <label class="form-check-label small" for="mandatory">Must</label>
+                            </div>
+                        </div>
+                        <div class="col-md-2 d-flex gap-1">
+                            <button class="btn btn-primary btn-sm" @onclick="SaveRequirementAsync">
+                                <i class="bi bi-check-lg"></i>
+                            </button>
+                            <button class="btn btn-secondary btn-sm" @onclick="() => _reqFormVisible = false">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (_requirements.Count == 0)
+            {
+                <p class="text-muted small mb-0">No technology requirements added yet.</p>
+            }
+            else
+            {
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Technology</th>
+                            <th class="text-center">Years</th>
+                            <th>Level</th>
+                            <th class="text-center">Mandatory</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var req in _requirements)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@req.Technology.Name</td>
+                                <td class="text-center">@req.RequiredYearsExperience</td>
+                                <td><span class="@EnumHelper.BadgeClass(req.RequirementLevel)">@EnumHelper.DisplayName(req.RequirementLevel)</span></td>
+                                <td class="text-center">
+                                    @if (req.IsMandatory)
+                                    {
+                                        <i class="bi bi-check-circle-fill text-success"></i>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-link btn-sm p-0 text-danger"
+                                            @onclick="() => DeleteRequirementAsync(req.Id)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private JobApplication _app = new() { Stage = ApplicationStage.Interested, Priority = Priority.Medium };
+    private bool _isNew => !Id.HasValue;
+    private bool _pageLoading = true;
+    private string? _saveError;
+
+    // Requirements
+    private List<JobTechnologyRequirement> _requirements = [];
+    private List<Technology> _availableTechs = [];
+    private bool _reqFormVisible;
+    private int _reqTechId;
+    private decimal _reqYears;
+    private RequirementLevel _reqLevel = RequirementLevel.Required;
+    private bool _reqMandatory = true;
+    private string? _reqError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!_isNew && Id.HasValue)
+        {
+            var loaded = await AppService.GetByIdAsync(Id.Value);
+            if (loaded is null)
+            {
+                Nav.NavigateTo("/applications");
+                return;
+            }
+            _app = loaded;
+            await LoadRequirementsAsync();
+        }
+        _pageLoading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saveError = null;
+        try
+        {
+            if (_isNew)
+            {
+                var created = await AppService.CreateAsync(_app);
+                Nav.NavigateTo($"/applications/{created.Id}/edit");
+            }
+            else
+            {
+                await AppService.UpdateAsync(_app);
+            }
+        }
+        catch (Exception ex)
+        {
+            _saveError = $"Save failed: {ex.Message}";
+        }
+    }
+
+    private async Task LoadRequirementsAsync()
+    {
+        if (Id is null) return;
+        _requirements = await AppService.GetRequirementsAsync(Id.Value);
+        var allTechs = await TechService.GetAllAsync();
+        var usedIds = _requirements.Select(r => r.TechnologyId).ToHashSet();
+        _availableTechs = allTechs.Where(t => !usedIds.Contains(t.Id)).ToList();
+    }
+
+    private void ToggleAddReq()
+    {
+        _reqTechId = 0;
+        _reqYears = 0;
+        _reqLevel = RequirementLevel.Required;
+        _reqMandatory = true;
+        _reqError = null;
+        _reqFormVisible = !_reqFormVisible;
+    }
+
+    private async Task SaveRequirementAsync()
+    {
+        _reqError = null;
+        if (_reqTechId == 0) { _reqError = "Select a technology."; return; }
+        await AppService.AddRequirementAsync(new JobTechnologyRequirement
+        {
+            JobApplicationId      = Id!.Value,
+            TechnologyId          = _reqTechId,
+            RequiredYearsExperience = _reqYears,
+            RequirementLevel      = _reqLevel,
+            IsMandatory           = _reqMandatory
+        });
+        _reqFormVisible = false;
+        await LoadRequirementsAsync();
+    }
+
+    private async Task DeleteRequirementAsync(int reqId)
+    {
+        await AppService.DeleteRequirementAsync(reqId);
+        await LoadRequirementsAsync();
+    }
+}

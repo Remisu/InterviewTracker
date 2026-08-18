@@ -1,0 +1,1028 @@
+@page "/applications/{Id:int}"
+@inject ApplicationService AppService
+@inject JobMatchService MatchService
+@inject ContactService ContactSvc
+@inject ActivityService ActivitySvc
+@inject InterviewService InterviewSvc
+@inject NavigationManager Nav
+@using InterviewTracker.Models.Enums
+
+<PageTitle>@(_app?.JobTitle ?? "Application")</PageTitle>
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></div>
+}
+else if (_app is null)
+{
+    <div class="alert alert-warning">Application not found.</div>
+}
+else
+{
+    <div class="page-header">
+        <div>
+            <h1 class="mb-0">@_app.JobTitle</h1>
+            <div class="text-muted small mt-1">
+                @_app.ClientCompany
+                @if (_app.RecruitingCompany is not null)
+                {
+                    <span class="ms-1">· via @_app.RecruitingCompany</span>
+                }
+                @if (_app.City is not null || _app.Country is not null)
+                {
+                    <span class="ms-1">· @_app.City@(_app.City != null && _app.Country != null ? ", " : "")@_app.Country</span>
+                }
+                <span class="ms-2">
+                    <span class="@EnumHelper.BadgeClass(_app.IsNoResponse ? ApplicationStage.NoResponse : _app.Stage)">
+                        @(_app.IsNoResponse ? "No Response" : EnumHelper.DisplayName(_app.Stage))
+                    </span>
+                    <span class="@EnumHelper.BadgeClass(_app.Priority) ms-1">@EnumHelper.DisplayName(_app.Priority)</span>
+                    @if (_matchResult is not null && _matchResult.HasRequirements)
+                    {
+                        <span class="ms-1"><JobMatchBadge Result="_matchResult" /></span>
+                    }
+                </span>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/applications/@Id/edit" class="btn btn-primary btn-sm">
+                <i class="bi bi-pencil me-1"></i>Edit
+            </a>
+            <a href="/applications" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+        </div>
+    </div>
+
+    @* ── Tabs ── *@
+    <ul class="nav nav-tabs mb-3">
+        @foreach (var tab in _tabs)
+        {
+            <li class="nav-item">
+                <button class="nav-link @(_activeTab == tab ? "active" : "")" @onclick="() => _activeTab = tab">
+                    @tab
+                </button>
+            </li>
+        }
+    </ul>
+
+    @* ── Overview ── *@
+    @if (_activeTab == "Overview")
+    {
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="it-card h-100">
+                    <h6 class="fw-bold mb-3">Position Details</h6>
+                    <dl class="row small mb-0">
+                        <dt class="col-5 text-muted">Employment Type</dt>
+                        <dd class="col-7">@EnumHelper.DisplayName(_app.EmploymentType)</dd>
+                        <dt class="col-5 text-muted">Work Mode</dt>
+                        <dd class="col-7">@EnumHelper.DisplayName(_app.WorkMode)</dd>
+                        <dt class="col-5 text-muted">City</dt>
+                        <dd class="col-7">@(_app.City ?? "—")</dd>
+                        <dt class="col-5 text-muted">Country</dt>
+                        <dd class="col-7">@(_app.Country ?? "—")</dd>
+                        <dt class="col-5 text-muted">Relocation</dt>
+                        <dd class="col-7">@(_app.RelocationRequired ? "Required" : "Not required")</dd>
+                        <dt class="col-5 text-muted">Visa Sponsorship</dt>
+                        <dd class="col-7">@(_app.VisaSponsorshipAvailable ? "Available" : "Not mentioned")</dd>
+                        @if (_app.JapaneseLevelRequired is not null)
+                        {
+                            <dt class="col-5 text-muted">Japanese</dt>
+                            <dd class="col-7">@_app.JapaneseLevelRequired</dd>
+                        }
+                        @if (_app.EnglishLevelRequired is not null)
+                        {
+                            <dt class="col-5 text-muted">English</dt>
+                            <dd class="col-7">@_app.EnglishLevelRequired</dd>
+                        }
+                    </dl>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="it-card h-100">
+                    <h6 class="fw-bold mb-3">Application Info</h6>
+                    <dl class="row small mb-0">
+                        <dt class="col-5 text-muted">Applied Date</dt>
+                        <dd class="col-7">@(_app.AppliedDate?.ToString("MMM d, yyyy") ?? "—")</dd>
+                        <dt class="col-5 text-muted">Days Since Applied</dt>
+                        <dd class="col-7">@(_app.AppliedDate.HasValue ? $"{(int)(DateTime.UtcNow - _app.AppliedDate.Value).TotalDays}d" : "—")</dd>
+                        <dt class="col-5 text-muted">Last Activity</dt>
+                        <dd class="col-7">@(_app.DaysSinceLastActivity is int d ? (d == 0 ? "Today" : $"{d}d ago") : "—")</dd>
+                        <dt class="col-5 text-muted">Next Follow-up</dt>
+                        <dd class="col-7">
+                            @if (_app.NextFollowUpDate.HasValue)
+                            {
+                                var daysUntil = (int)(_app.NextFollowUpDate.Value.Date - DateTime.UtcNow.Date).TotalDays;
+                                <span class="@(daysUntil < 0 ? "text-danger fw-semibold" : daysUntil == 0 ? "text-warning fw-semibold" : "")">
+                                    @_app.NextFollowUpDate.Value.ToString("MMM d, yyyy")
+                                    @if (daysUntil < 0) { <span> (overdue)</span> }
+                                    else if (daysUntil == 0) { <span> (today)</span> }
+                                    else if (daysUntil == 1) { <span> (tomorrow)</span> }
+                                </span>
+                            }
+                            else { <span>—</span> }
+                        </dd>
+                        @if (_app.SalaryMin.HasValue || _app.SalaryMax.HasValue)
+                        {
+                            <dt class="col-5 text-muted">Salary</dt>
+                            <dd class="col-7">
+                                @(_app.SalaryMin?.ToString("N0") ?? "?") – @(_app.SalaryMax?.ToString("N0") ?? "?")
+                                @_app.Currency
+                            </dd>
+                        }
+                        @if (_app.JobUrl is not null)
+                        {
+                            <dt class="col-5 text-muted">Job URL</dt>
+                            <dd class="col-7">
+                                <a href="@_app.JobUrl" target="_blank" rel="noreferrer" class="small">
+                                    <i class="bi bi-box-arrow-up-right me-1"></i>Open
+                                </a>
+                            </dd>
+                        }
+                        @if (_app.JobReference is not null)
+                        {
+                            <dt class="col-5 text-muted">Reference</dt>
+                            <dd class="col-7 text-muted">@_app.JobReference</dd>
+                        }
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        @if (_app.Notes is not null)
+        {
+            <div class="it-card mt-3">
+                <h6 class="fw-bold mb-2">Notes</h6>
+                <p class="mb-0 small" style="white-space: pre-wrap">@_app.Notes</p>
+            </div>
+        }
+
+        @if (_app.JobDescription is not null)
+        {
+            <div class="it-card mt-3">
+                <h6 class="fw-bold mb-2">Job Description</h6>
+                <p class="mb-0 small" style="white-space: pre-wrap">@_app.JobDescription</p>
+            </div>
+        }
+    }
+
+    @* ── Requirements + Match Score ── *@
+    @if (_activeTab == "Requirements")
+    {
+        @if (_app.TechnologyRequirements.Count == 0)
+        {
+            <div class="it-card text-center text-muted py-4">
+                <i class="bi bi-cpu display-6 d-block mb-2"></i>
+                No technology requirements added yet.
+                <a href="/applications/@Id/edit" class="ms-2">Add requirements</a>
+            </div>
+        }
+        else
+        {
+            <div class="it-card">
+                @if (_matchResult is not null)
+                {
+                    <JobMatchDetails Result="_matchResult" />
+                }
+                else
+                {
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @* ── Contacts placeholder ── *@
+    @* ── Contacts ── *@
+    @if (_activeTab == "Contacts")
+    {
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0 fw-bold">Contacts</h6>
+            <button class="btn btn-primary btn-sm" @onclick="OpenAddContact">
+                <i class="bi bi-person-plus me-1"></i>Add Contact
+            </button>
+        </div>
+
+        @if (_contacts.Count == 0)
+        {
+            <div class="it-card text-center text-muted py-4">
+                <i class="bi bi-person-lines-fill display-6 d-block mb-2"></i>
+                No contacts yet. Add a recruiter, hiring manager, or referral.
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var c in _contacts)
+                {
+                    <div class="col-md-6">
+                        <div class="it-card h-100">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="fw-semibold">@c.FullName</div>
+                                    <div class="small text-muted">
+                                        @EnumHelper.DisplayName(c.Type)
+                                        @if (c.Position is not null) { <span> · @c.Position</span> }
+                                        @if (c.Company is not null) { <span> · @c.Company</span> }
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => OpenEditContact(c)" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => ConfirmDeleteContact(c)" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mt-2 small">
+                                @if (c.Email is not null)
+                                {
+                                    <div><i class="bi bi-envelope me-1"></i><a href="mailto:@c.Email">@c.Email</a></div>
+                                }
+                                @if (c.Phone is not null)
+                                {
+                                    <div><i class="bi bi-telephone me-1"></i>@c.Phone</div>
+                                }
+                                @if (c.LinkedIn is not null)
+                                {
+                                    <div><i class="bi bi-linkedin me-1"></i><a href="@c.LinkedIn" target="_blank" rel="noreferrer">LinkedIn</a></div>
+                                }
+                                @if (c.Notes is not null)
+                                {
+                                    <div class="text-muted mt-1" style="white-space:pre-wrap">@c.Notes</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Contact modal *@
+        @if (_contactFormOpen)
+        {
+            <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">@(_contactEdit.Id == 0 ? "Add Contact" : "Edit Contact")</h5>
+                            <button class="btn-close" @onclick="CloseContactForm"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Full Name <span class="text-danger">*</span></label>
+                                <input class="form-control form-control-sm" @bind="_contactEdit.FullName" />
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Type</label>
+                                    <select class="form-select form-select-sm" @bind="_contactEdit.Type">
+                                        @foreach (var t in Enum.GetValues<ContactType>())
+                                        {
+                                            <option value="@t">@EnumHelper.DisplayName(t)</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Direction</label>
+                                    <select class="form-select form-select-sm" @bind="_contactEdit.Direction">
+                                        @foreach (var d in Enum.GetValues<ContactDirection>())
+                                        {
+                                            <option value="@d">@EnumHelper.DisplayName(d)</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Position</label>
+                                    <input class="form-control form-control-sm" @bind="_contactEdit.Position" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Company</label>
+                                    <input class="form-control form-control-sm" @bind="_contactEdit.Company" />
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Email</label>
+                                <input class="form-control form-control-sm" type="email" @bind="_contactEdit.Email" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Phone</label>
+                                <input class="form-control form-control-sm" @bind="_contactEdit.Phone" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">LinkedIn URL</label>
+                                <input class="form-control form-control-sm" @bind="_contactEdit.LinkedIn" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Notes</label>
+                                <textarea class="form-control form-control-sm" rows="2" @bind="_contactEdit.Notes"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary btn-sm" @onclick="CloseContactForm">Cancel</button>
+                            <button class="btn btn-primary btn-sm" @onclick="SaveContactAsync">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (_contactDeleteTarget is not null)
+        {
+            <ConfirmDialog Title="Delete Contact"
+                           Message="@($"Delete '{_contactDeleteTarget.FullName}'? This cannot be undone.")"
+                           OnConfirm="DeleteContactAsync"
+                           OnCancel="() => _contactDeleteTarget = null" />
+        }
+    }
+
+    @* ── Interviews ── *@
+    @if (_activeTab == "Interviews")
+    {
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0 fw-bold">Interviews</h6>
+            <button class="btn btn-primary btn-sm" @onclick="OpenAddInterview">
+                <i class="bi bi-calendar-plus me-1"></i>Add Interview
+            </button>
+        </div>
+
+        @if (_interviews.Count == 0)
+        {
+            <div class="it-card text-center text-muted py-4">
+                <i class="bi bi-calendar-check display-6 d-block mb-2"></i>
+                No interviews yet.
+            </div>
+        }
+        else
+        {
+            @foreach (var iv in _interviews)
+            {
+                <div class="it-card mb-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-semibold">@EnumHelper.DisplayName(iv.InterviewType)</div>
+                            <div class="small text-muted">
+                                <span class="badge @EnumHelper.BadgeClass(iv.Status) me-1">@EnumHelper.DisplayName(iv.Status)</span>
+                                @if (iv.ScheduledDate.HasValue) { <span>@iv.ScheduledDate.Value.ToString("MMM d, yyyy HH:mm")</span> }
+                                @if (iv.DurationMinutes.HasValue) { <span class="ms-1">· @iv.DurationMinutes min</span> }
+                                @if (iv.Interviewer is not null) { <span class="ms-1">· @iv.Interviewer</span> }
+                            </div>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="() => ToggleInterviewExpand(iv.Id)" title="Questions">
+                                <i class="bi bi-question-circle"></i>
+                                @if (iv.Questions.Count > 0) { <span class="badge bg-secondary ms-1">@iv.Questions.Count</span> }
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="() => OpenEditInterview(iv)" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => ConfirmDeleteInterview(iv)" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    @if (iv.LocationOrMeetingUrl is not null || iv.Result is not null || iv.Notes is not null)
+                    {
+                        <div class="mt-2 small">
+                            @if (iv.LocationOrMeetingUrl is not null) { <div><i class="bi bi-geo-alt me-1"></i>@iv.LocationOrMeetingUrl</div> }
+                            @if (iv.Result is not null) { <div class="mt-1"><strong>Result:</strong> @iv.Result</div> }
+                            @if (iv.Notes is not null) { <div class="text-muted mt-1" style="white-space:pre-wrap">@iv.Notes</div> }
+                        </div>
+                    }
+                    @if (iv.Difficulty.HasValue || iv.PerformanceRating.HasValue)
+                    {
+                        <div class="mt-2 small d-flex gap-3">
+                            @if (iv.Difficulty.HasValue)
+                            {
+                                <div>Difficulty: <StarRating Value="iv.Difficulty" Readonly="true" /></div>
+                            }
+                            @if (iv.PerformanceRating.HasValue)
+                            {
+                                <div>Performance: <StarRating Value="iv.PerformanceRating" Readonly="true" /></div>
+                            }
+                        </div>
+                    }
+
+                    @* Inline questions for this interview *@
+                    @if (_expandedInterviewId == iv.Id)
+                    {
+                        <hr class="my-2" />
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small fw-semibold">Questions</span>
+                            <button class="btn btn-outline-primary btn-sm" @onclick="() => OpenAddQuestion(iv.Id)">
+                                <i class="bi bi-plus me-1"></i>Add Question
+                            </button>
+                        </div>
+                        @if (iv.Questions.Count == 0)
+                        {
+                            <p class="small text-muted">No questions recorded for this interview.</p>
+                        }
+                        else
+                        {
+                            @foreach (var q in iv.Questions)
+                            {
+                                <div class="border rounded p-2 mb-2 small">
+                                    <div class="d-flex justify-content-between">
+                                        <div class="fw-semibold">@q.Question</div>
+                                        <div class="d-flex gap-1">
+                                            <button class="btn btn-outline-secondary btn-sm py-0 px-1" @onclick="() => OpenEditQuestion(q)" title="Edit"><i class="bi bi-pencil"></i></button>
+                                            <button class="btn btn-outline-danger btn-sm py-0 px-1" @onclick="() => ConfirmDeleteQuestion(q)" title="Delete"><i class="bi bi-trash"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="text-muted">@EnumHelper.DisplayName(q.Category)</div>
+                                    @if (q.MyAnswer is not null) { <div class="mt-1"><strong>My answer:</strong> @q.MyAnswer</div> }
+                                    @if (q.IdealAnswer is not null) { <div class="mt-1"><strong>Ideal:</strong> @q.IdealAnswer</div> }
+                                    <div class="d-flex gap-2 mt-1">
+                                        @if (q.Difficulty.HasValue) { <span>Difficulty: <StarRating Value="q.Difficulty" Readonly="true" /></span> }
+                                        @if (q.WasAnsweredCorrectly.HasValue)
+                                        {
+                                            <span class="badge @(q.WasAnsweredCorrectly.Value ? "bg-success" : "bg-danger")">
+                                                @(q.WasAnsweredCorrectly.Value ? "✓ Answered" : "✗ Missed")
+                                            </span>
+                                        }
+                                        @if (q.NeedsReview) { <span class="badge bg-warning text-dark">Needs Review</span> }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    }
+                </div>
+            }
+        }
+
+        @* Interview modal *@
+        @if (_interviewFormOpen)
+        {
+            <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">@(_interviewEdit.Id == 0 ? "Add Interview" : "Edit Interview")</h5>
+                            <button class="btn-close" @onclick="CloseInterviewForm"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Type</label>
+                                    <select class="form-select form-select-sm" @bind="_interviewEdit.InterviewType">
+                                        @foreach (var t in Enum.GetValues<InterviewType>())
+                                        {
+                                            <option value="@t">@EnumHelper.DisplayName(t)</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Status</label>
+                                    <select class="form-select form-select-sm" @bind="_interviewEdit.Status">
+                                        @foreach (var s in Enum.GetValues<InterviewStatus>())
+                                        {
+                                            <option value="@s">@EnumHelper.DisplayName(s)</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Scheduled Date</label>
+                                    <input class="form-control form-control-sm" type="datetime-local"
+                                           value="@(_interviewEdit.ScheduledDate?.ToString("yyyy-MM-ddTHH:mm"))"
+                                           @onchange="e => _interviewEdit.ScheduledDate = string.IsNullOrEmpty(e.Value?.ToString()) ? null : DateTime.Parse(e.Value!.ToString()!)" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Duration (min)</label>
+                                    <input class="form-control form-control-sm" type="number" @bind="_interviewEdit.DurationMinutes" />
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Interviewer</label>
+                                    <input class="form-control form-control-sm" @bind="_interviewEdit.Interviewer" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Location / Meeting URL</label>
+                                    <input class="form-control form-control-sm" @bind="_interviewEdit.LocationOrMeetingUrl" />
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Result</label>
+                                <input class="form-control form-control-sm" @bind="_interviewEdit.Result" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Notes</label>
+                                <textarea class="form-control form-control-sm" rows="3" @bind="_interviewEdit.Notes"></textarea>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Difficulty</label>
+                                    <StarRating Value="_interviewEdit.Difficulty" ValueChanged="v => _interviewEdit.Difficulty = v" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Performance</label>
+                                    <StarRating Value="_interviewEdit.PerformanceRating" ValueChanged="v => _interviewEdit.PerformanceRating = v" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary btn-sm" @onclick="CloseInterviewForm">Cancel</button>
+                            <button class="btn btn-primary btn-sm" @onclick="SaveInterviewAsync">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (_interviewDeleteTarget is not null)
+        {
+            <ConfirmDialog Title="Delete Interview"
+                           Message="Delete this interview and all its questions? This cannot be undone."
+                           OnConfirm="DeleteInterviewAsync"
+                           OnCancel="() => _interviewDeleteTarget = null" />
+        }
+
+        @* Question modal *@
+        @if (_questionFormOpen)
+        {
+            <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">@(_questionEdit.Id == 0 ? "Add Question" : "Edit Question")</h5>
+                            <button class="btn-close" @onclick="CloseQuestionForm"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Question <span class="text-danger">*</span></label>
+                                <textarea class="form-control form-control-sm" rows="2" @bind="_questionEdit.Question"></textarea>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Category</label>
+                                    <select class="form-select form-select-sm" @bind="_questionEdit.Category">
+                                        @foreach (var c in Enum.GetValues<QuestionCategory>())
+                                        {
+                                            <option value="@c">@EnumHelper.DisplayName(c)</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Difficulty</label>
+                                    <StarRating Value="_questionEdit.Difficulty" ValueChanged="v => _questionEdit.Difficulty = v" />
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">My Answer</label>
+                                <textarea class="form-control form-control-sm" rows="2" @bind="_questionEdit.MyAnswer"></textarea>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Ideal Answer</label>
+                                <textarea class="form-control form-control-sm" rows="2" @bind="_questionEdit.IdealAnswer"></textarea>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Notes</label>
+                                <textarea class="form-control form-control-sm" rows="2" @bind="_questionEdit.Notes"></textarea>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="chkAnswered" @bind="_answeredCorrectly" />
+                                        <label class="form-check-label small" for="chkAnswered">Answered correctly</label>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="chkNotAnswered" @bind="_answeredWrong" />
+                                        <label class="form-check-label small" for="chkNotAnswered">Answered incorrectly</label>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="chkReview" @bind="_questionEdit.NeedsReview" />
+                                        <label class="form-check-label small" for="chkReview">Needs Review</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary btn-sm" @onclick="CloseQuestionForm">Cancel</button>
+                            <button class="btn btn-primary btn-sm" @onclick="SaveQuestionAsync">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (_questionDeleteTarget is not null)
+        {
+            <ConfirmDialog Title="Delete Question"
+                           Message="Delete this question? This cannot be undone."
+                           OnConfirm="DeleteQuestionAsync"
+                           OnCancel="() => _questionDeleteTarget = null" />
+        }
+    }
+
+    @* ── Timeline ── *@
+    @if (_activeTab == "Timeline")
+    {
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0 fw-bold">Activity Timeline</h6>
+            <button class="btn btn-primary btn-sm" @onclick="OpenAddActivity">
+                <i class="bi bi-plus me-1"></i>Log Activity
+            </button>
+        </div>
+
+        @if (_activities.Count == 0)
+        {
+            <div class="it-card text-center text-muted py-4">
+                <i class="bi bi-clock-history display-6 d-block mb-2"></i>
+                No activity yet.
+            </div>
+        }
+        else
+        {
+            <div class="it-card">
+                <div class="timeline">
+                    @foreach (var act in _activities)
+                    {
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="@EnumHelper.IconClass(act.ActivityType)"></i>
+                            </div>
+                            <div class="timeline-body flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="fw-semibold">@act.Title</div>
+                                    @if (act.IsManual)
+                                    {
+                                        <div class="d-flex gap-1 ms-2">
+                                            <button class="btn btn-outline-secondary btn-sm py-0 px-1" @onclick="() => OpenEditActivity(act)" title="Edit"><i class="bi bi-pencil"></i></button>
+                                            <button class="btn btn-outline-danger btn-sm py-0 px-1" @onclick="() => ConfirmDeleteActivity(act)" title="Delete"><i class="bi bi-trash"></i></button>
+                                        </div>
+                                    }
+                                </div>
+                                @if (act.Description is not null)
+                                {
+                                    <div class="small text-muted" style="white-space:pre-wrap">@act.Description</div>
+                                }
+                                <div class="small text-muted mt-1">
+                                    @act.ActivityDate.ToString("MMM d, yyyy HH:mm")
+                                    @if (!act.IsManual) { <span class="badge bg-secondary ms-1" style="font-size:.65rem">auto</span> }
+                                </div>
+                                @if (act.FollowUpDate.HasValue)
+                                {
+                                    var daysUntil = (int)(act.FollowUpDate.Value.Date - DateTime.UtcNow.Date).TotalDays;
+                                    <div class="small mt-1 @(daysUntil < 0 ? "text-danger" : daysUntil == 0 ? "text-warning" : "text-primary")">
+                                        <i class="bi bi-alarm me-1"></i>Follow-up: @act.FollowUpDate.Value.ToString("MMM d, yyyy")
+                                        @if (daysUntil < 0) { <span> (overdue)</span> }
+                                        else if (daysUntil == 0) { <span> (today)</span> }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Activity modal *@
+        @if (_activityFormOpen)
+        {
+            <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">@(_activityEdit.Id == 0 ? "Log Activity" : "Edit Activity")</h5>
+                            <button class="btn-close" @onclick="CloseActivityForm"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Title <span class="text-danger">*</span></label>
+                                <input class="form-control form-control-sm" @bind="_activityEdit.Title" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Type</label>
+                                <select class="form-select form-select-sm" @bind="_activityEdit.ActivityType">
+                                    @foreach (var t in Enum.GetValues<ActivityType>())
+                                    {
+                                        <option value="@t">@EnumHelper.DisplayName(t)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Description</label>
+                                <textarea class="form-control form-control-sm" rows="3" @bind="_activityEdit.Description"></textarea>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Date</label>
+                                <input class="form-control form-control-sm" type="datetime-local"
+                                       value="@(_activityEdit.ActivityDate.ToString("yyyy-MM-ddTHH:mm"))"
+                                       @onchange="e => _activityEdit.ActivityDate = string.IsNullOrEmpty(e.Value?.ToString()) ? DateTime.UtcNow : DateTime.Parse(e.Value!.ToString()!)" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Follow-up Date</label>
+                                <input class="form-control form-control-sm" type="date"
+                                       value="@(_activityEdit.FollowUpDate?.ToString("yyyy-MM-dd"))"
+                                       @onchange="e => _activityEdit.FollowUpDate = string.IsNullOrEmpty(e.Value?.ToString()) ? null : DateTime.Parse(e.Value!.ToString()!)" />
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary btn-sm" @onclick="CloseActivityForm">Cancel</button>
+                            <button class="btn btn-primary btn-sm" @onclick="SaveActivityAsync">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (_activityDeleteTarget is not null)
+        {
+            <ConfirmDialog Title="Delete Activity"
+                           Message="@($"Delete '{_activityDeleteTarget.Title}'? This cannot be undone.")"
+                           OnConfirm="DeleteActivityAsync"
+                           OnCancel="() => _activityDeleteTarget = null" />
+        }
+    }
+
+    @* ── Questions ── *@
+    @if (_activeTab == "Questions")
+    {
+        <div class="it-card">
+            <p class="text-muted small mb-0">
+                <i class="bi bi-info-circle me-1"></i>
+                Questions are managed per interview. Go to the <strong>Interviews</strong> tab, expand an interview, and use the questions panel there.
+            </p>
+        </div>
+    }
+
+    @* ── Notes ── *@
+    @if (_activeTab == "Notes")
+    {
+        <div class="it-card">
+            <div class="d-flex justify-content-end mb-2">
+                <a href="/applications/@Id/edit" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-pencil me-1"></i>Edit Notes
+                </a>
+            </div>
+            @if (string.IsNullOrWhiteSpace(_app.Notes))
+            {
+                <p class="text-muted small text-center py-3">No notes yet. Use the Edit page to add notes.</p>
+            }
+            else
+            {
+                <p class="mb-0 small" style="white-space: pre-wrap">@_app.Notes</p>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private JobApplication? _app;
+    private JobMatchResult? _matchResult;
+    private bool _loading = true;
+    private string _activeTab = "Overview";
+
+    private static readonly string[] _tabs = ["Overview", "Requirements", "Contacts", "Interviews", "Timeline", "Questions", "Notes"];
+
+    // ── Tab data ──────────────────────────────────────────────────────────────
+    private List<Contact>             _contacts   = [];
+    private List<Interview>           _interviews = [];
+    private List<ApplicationActivity> _activities = [];
+
+    // ── Contact form ──────────────────────────────────────────────────────────
+    private bool     _contactFormOpen   = false;
+    private Contact  _contactEdit       = new();
+    private Contact? _contactDeleteTarget;
+
+    // ── Interview form ────────────────────────────────────────────────────────
+    private bool       _interviewFormOpen    = false;
+    private Interview  _interviewEdit        = new();
+    private Interview? _interviewDeleteTarget;
+    private int?       _expandedInterviewId;
+
+    // ── Question form ─────────────────────────────────────────────────────────
+    private bool              _questionFormOpen    = false;
+    private InterviewQuestion _questionEdit        = new();
+    private InterviewQuestion? _questionDeleteTarget;
+    private bool _answeredCorrectly;
+    private bool _answeredWrong;
+
+    // ── Activity form ─────────────────────────────────────────────────────────
+    private bool                _activityFormOpen    = false;
+    private ApplicationActivity _activityEdit        = new();
+    private ApplicationActivity? _activityDeleteTarget;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        _app = await AppService.GetByIdAsync(Id);
+        if (_app is not null)
+        {
+            _matchResult = await MatchService.CalculateAsync(Id);
+            await LoadTabDataAsync();
+        }
+        _loading = false;
+    }
+
+    private async Task LoadTabDataAsync()
+    {
+        _contacts   = await ContactSvc.GetByApplicationAsync(Id);
+        _interviews = await InterviewSvc.GetByApplicationAsync(Id);
+        _activities = await ActivitySvc.GetByApplicationAsync(Id);
+    }
+
+    // ── Contact CRUD ──────────────────────────────────────────────────────────
+
+    private void OpenAddContact()
+    {
+        _contactEdit = new Contact { JobApplicationId = Id };
+        _contactFormOpen = true;
+    }
+
+    private void OpenEditContact(Contact c)
+    {
+        _contactEdit = new Contact
+        {
+            Id = c.Id, JobApplicationId = c.JobApplicationId, FullName = c.FullName,
+            Type = c.Type, Direction = c.Direction, Company = c.Company,
+            Position = c.Position, Email = c.Email, Phone = c.Phone,
+            LinkedIn = c.LinkedIn, Notes = c.Notes
+        };
+        _contactFormOpen = true;
+    }
+
+    private void CloseContactForm() => _contactFormOpen = false;
+
+    private async Task SaveContactAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_contactEdit.FullName)) return;
+        if (_contactEdit.Id == 0)
+            await ContactSvc.CreateAsync(_contactEdit);
+        else
+            await ContactSvc.UpdateAsync(_contactEdit);
+        _contactFormOpen = false;
+        _contacts = await ContactSvc.GetByApplicationAsync(Id);
+    }
+
+    private void ConfirmDeleteContact(Contact c) => _contactDeleteTarget = c;
+
+    private async Task DeleteContactAsync()
+    {
+        if (_contactDeleteTarget is null) return;
+        await ContactSvc.DeleteAsync(_contactDeleteTarget.Id);
+        _contactDeleteTarget = null;
+        _contacts = await ContactSvc.GetByApplicationAsync(Id);
+    }
+
+    // ── Interview CRUD ────────────────────────────────────────────────────────
+
+    private void OpenAddInterview()
+    {
+        _interviewEdit = new Interview { JobApplicationId = Id };
+        _interviewFormOpen = true;
+    }
+
+    private void OpenEditInterview(Interview iv)
+    {
+        _interviewEdit = new Interview
+        {
+            Id = iv.Id, JobApplicationId = iv.JobApplicationId,
+            InterviewType = iv.InterviewType, ScheduledDate = iv.ScheduledDate,
+            DurationMinutes = iv.DurationMinutes, Interviewer = iv.Interviewer,
+            InterviewerContactId = iv.InterviewerContactId,
+            LocationOrMeetingUrl = iv.LocationOrMeetingUrl,
+            Status = iv.Status, Notes = iv.Notes, Result = iv.Result,
+            Difficulty = iv.Difficulty, PerformanceRating = iv.PerformanceRating
+        };
+        _interviewFormOpen = true;
+    }
+
+    private void CloseInterviewForm() => _interviewFormOpen = false;
+
+    private async Task SaveInterviewAsync()
+    {
+        if (_interviewEdit.Id == 0)
+            await InterviewSvc.CreateAsync(_interviewEdit, ActivitySvc);
+        else
+            await InterviewSvc.UpdateAsync(_interviewEdit, ActivitySvc);
+        _interviewFormOpen = false;
+        _interviews = await InterviewSvc.GetByApplicationAsync(Id);
+        _activities = await ActivitySvc.GetByApplicationAsync(Id);
+    }
+
+    private void ConfirmDeleteInterview(Interview iv) => _interviewDeleteTarget = iv;
+
+    private async Task DeleteInterviewAsync()
+    {
+        if (_interviewDeleteTarget is null) return;
+        await InterviewSvc.DeleteAsync(_interviewDeleteTarget.Id);
+        _interviewDeleteTarget = null;
+        _interviews = await InterviewSvc.GetByApplicationAsync(Id);
+    }
+
+    private void ToggleInterviewExpand(int ivId)
+        => _expandedInterviewId = _expandedInterviewId == ivId ? null : ivId;
+
+    // ── Question CRUD ─────────────────────────────────────────────────────────
+
+    private void OpenAddQuestion(int interviewId)
+    {
+        _questionEdit = new InterviewQuestion { InterviewId = interviewId };
+        _answeredCorrectly = false;
+        _answeredWrong = false;
+        _questionFormOpen = true;
+    }
+
+    private void OpenEditQuestion(InterviewQuestion q)
+    {
+        _questionEdit = new InterviewQuestion
+        {
+            Id = q.Id, InterviewId = q.InterviewId, Question = q.Question,
+            Category = q.Category, MyAnswer = q.MyAnswer, IdealAnswer = q.IdealAnswer,
+            WasAnsweredCorrectly = q.WasAnsweredCorrectly, Difficulty = q.Difficulty,
+            Notes = q.Notes, NeedsReview = q.NeedsReview
+        };
+        _answeredCorrectly = q.WasAnsweredCorrectly == true;
+        _answeredWrong     = q.WasAnsweredCorrectly == false;
+        _questionFormOpen = true;
+    }
+
+    private void CloseQuestionForm() => _questionFormOpen = false;
+
+    private async Task SaveQuestionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_questionEdit.Question)) return;
+        _questionEdit.WasAnsweredCorrectly = _answeredCorrectly ? true : _answeredWrong ? false : null;
+
+        if (_questionEdit.Id == 0)
+            await InterviewSvc.AddQuestionAsync(_questionEdit);
+        else
+            await InterviewSvc.UpdateQuestionAsync(_questionEdit);
+
+        _questionFormOpen = false;
+        _interviews = await InterviewSvc.GetByApplicationAsync(Id);
+    }
+
+    private void ConfirmDeleteQuestion(InterviewQuestion q) => _questionDeleteTarget = q;
+
+    private async Task DeleteQuestionAsync()
+    {
+        if (_questionDeleteTarget is null) return;
+        await InterviewSvc.DeleteQuestionAsync(_questionDeleteTarget.Id);
+        _questionDeleteTarget = null;
+        _interviews = await InterviewSvc.GetByApplicationAsync(Id);
+    }
+
+    // ── Activity CRUD ─────────────────────────────────────────────────────────
+
+    private void OpenAddActivity()
+    {
+        _activityEdit = new ApplicationActivity
+        {
+            JobApplicationId = Id,
+            ActivityDate = DateTime.UtcNow,
+            ActivityType = ActivityType.Note
+        };
+        _activityFormOpen = true;
+    }
+
+    private void OpenEditActivity(ApplicationActivity a)
+    {
+        _activityEdit = new ApplicationActivity
+        {
+            Id = a.Id, JobApplicationId = a.JobApplicationId, ActivityType = a.ActivityType,
+            Title = a.Title, Description = a.Description, ActivityDate = a.ActivityDate,
+            ContactId = a.ContactId, FollowUpDate = a.FollowUpDate, IsManual = a.IsManual
+        };
+        _activityFormOpen = true;
+    }
+
+    private void CloseActivityForm() => _activityFormOpen = false;
+
+    private async Task SaveActivityAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_activityEdit.Title)) return;
+        if (_activityEdit.Id == 0)
+            await ActivitySvc.CreateAsync(_activityEdit);
+        else
+            await ActivitySvc.UpdateAsync(_activityEdit);
+        _activityFormOpen = false;
+        _activities = await ActivitySvc.GetByApplicationAsync(Id);
+    }
+
+    private void ConfirmDeleteActivity(ApplicationActivity a) => _activityDeleteTarget = a;
+
+    private async Task DeleteActivityAsync()
+    {
+        if (_activityDeleteTarget is null) return;
+        await ActivitySvc.DeleteAsync(_activityDeleteTarget.Id);
+        _activityDeleteTarget = null;
+        _activities = await ActivitySvc.GetByApplicationAsync(Id);
+    }
+}

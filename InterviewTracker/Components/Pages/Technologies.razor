@@ -1,0 +1,256 @@
+@page "/technologies"
+@inject TechnologyService TechService
+
+<PageTitle>Technologies</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-cpu me-2"></i>Technologies</h1>
+    <button class="btn btn-primary btn-sm" @onclick="OpenCreate">
+        <i class="bi bi-plus-lg me-1"></i>New Technology
+    </button>
+</div>
+
+@* ── Filters ── *@
+<div class="it-card mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label fw-semibold small mb-1">Search</label>
+            <input class="form-control form-control-sm" placeholder="Name or description…"
+                   @bind="_search" @bind:after="LoadAsync" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold small mb-1">Category</label>
+            <select class="form-select form-select-sm" @onchange="OnCategoryChange">
+                <option value="">All Categories</option>
+                @foreach (var cat in EnumHelper.AllTechCategories())
+                {
+                    <option value="@((int)cat)">@EnumHelper.DisplayName(cat)</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" id="showInactive"
+                       @bind="_showInactive" @bind:after="LoadAsync" />
+                <label class="form-check-label small" for="showInactive">Show inactive</label>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ── Create / Edit form ── *@
+@if (_formVisible)
+{
+    <div class="it-card mb-3 border border-primary">
+        <h6 class="fw-bold mb-3">@(_editId.HasValue ? "Edit Technology" : "New Technology")</h6>
+        <EditForm Model="_form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Name *</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_form.Name" />
+                    <ValidationMessage For="() => _form.Name" class="text-danger small" />
+                    @if (_nameError is not null)
+                    {
+                        <div class="text-danger small">@_nameError</div>
+                    }
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Category *</label>
+                    <InputSelect class="form-select form-select-sm" @bind-Value="_form.Category">
+                        @foreach (var cat in EnumHelper.AllTechCategories())
+                        {
+                            <option value="@cat">@EnumHelper.DisplayName(cat)</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small fw-semibold">Description</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_form.Description" />
+                </div>
+            </div>
+            <div class="mt-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-check-lg me-1"></i>Save
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" @onclick="CloseForm">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@* ── Table ── *@
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></div>
+}
+else if (_technologies.Count == 0)
+{
+    <div class="it-card text-center text-muted py-4">
+        <i class="bi bi-cpu display-6 d-block mb-2"></i>
+        No technologies found.
+    </div>
+}
+else
+{
+    <div class="it-card p-0">
+        <table class="table table-sm table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Description</th>
+                    <th class="text-center">Apps</th>
+                    <th class="text-center">Active</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var tech in _technologies)
+                {
+                    <tr class="@(!tech.IsActive ? "text-muted" : "")">
+                        <td class="fw-semibold">@tech.Name</td>
+                        <td><span class="badge bg-light text-dark border">@EnumHelper.DisplayName(tech.Category)</span></td>
+                        <td class="small text-muted">@tech.Description</td>
+                        <td class="text-center">
+                            <span class="badge bg-secondary">@_appCounts.GetValueOrDefault(tech.Id, 0)</span>
+                        </td>
+                        <td class="text-center">
+                            <div class="form-check form-switch d-flex justify-content-center mb-0">
+                                <input class="form-check-input" type="checkbox" checked="@tech.IsActive"
+                                       @onchange="() => ToggleActiveAsync(tech)" />
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-link btn-sm p-0 me-2" title="Edit" @onclick="() => OpenEdit(tech)">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-link btn-sm p-0 text-danger" title="Delete"
+                                    @onclick="() => AskDelete(tech)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<ConfirmDialog Visible="_deleteVisible"
+               Title="Delete Technology"
+               Message=@($"Delete '{_deleteTarget?.Name}'? This cannot be undone.")
+               OnConfirm="ConfirmDeleteAsync"
+               OnCancel="() => _deleteVisible = false" />
+
+@code {
+    // State
+    private List<Technology> _technologies = [];
+    private Dictionary<int, int> _appCounts = [];
+    private bool _loading = true;
+
+    // Filters
+    private string _search = string.Empty;
+    private TechnologyCategory? _filterCategory;
+    private bool _showInactive;
+
+    // Form
+    private bool _formVisible;
+    private int? _editId;
+    private Technology _form = new();
+    private string? _nameError;
+
+    // Delete
+    private bool _deleteVisible;
+    private Technology? _deleteTarget;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _technologies = await TechService.SearchAsync(_search, _filterCategory, _showInactive);
+        _appCounts = await TechService.GetApplicationCountsAsync();
+        _loading = false;
+    }
+
+    private void OnCategoryChange(ChangeEventArgs e)
+    {
+        _filterCategory = string.IsNullOrEmpty(e.Value?.ToString())
+            ? null
+            : (TechnologyCategory)int.Parse(e.Value.ToString()!);
+        _ = LoadAsync();
+    }
+
+    private void OpenCreate()
+    {
+        _editId = null;
+        _form = new Technology { IsActive = true };
+        _nameError = null;
+        _formVisible = true;
+    }
+
+    private void OpenEdit(Technology tech)
+    {
+        _editId = tech.Id;
+        _form = new Technology
+        {
+            Id          = tech.Id,
+            Name        = tech.Name,
+            Category    = tech.Category,
+            Description = tech.Description,
+            IsActive    = tech.IsActive
+        };
+        _nameError = null;
+        _formVisible = true;
+    }
+
+    private void CloseForm()
+    {
+        _formVisible = false;
+        _nameError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _nameError = null;
+        if (await TechService.NameExistsAsync(_form.Name, _editId))
+        {
+            _nameError = "A technology with this name already exists.";
+            return;
+        }
+
+        if (_editId.HasValue)
+        {
+            await TechService.UpdateAsync(_form);
+        }
+        else
+        {
+            await TechService.CreateAsync(_form);
+        }
+
+        CloseForm();
+        await LoadAsync();
+    }
+
+    private async Task ToggleActiveAsync(Technology tech)
+    {
+        await TechService.SetActiveAsync(tech.Id, !tech.IsActive);
+        await LoadAsync();
+    }
+
+    private void AskDelete(Technology tech)
+    {
+        _deleteTarget = tech;
+        _deleteVisible = true;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleteTarget is null) return;
+        await TechService.DeleteAsync(_deleteTarget.Id);
+        _deleteVisible = false;
+        _deleteTarget = null;
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,48 @@
+@* One column of the Kanban board *@
+
+<div class="kanban-column @(IsDragOver ? "kanban-column--drag-over" : "")"
+     style="--col-accent: @AccentColor"
+     @ondragover:preventDefault="true"
+     @ondragover="OnDragOver"
+     @ondragleave="OnDragLeave"
+     @ondrop="OnDrop">
+
+    @* ── Column header ── *@
+    <div class="kanban-column__header">
+        <div class="kanban-column__accent"></div>
+        <span class="kanban-column__title">@Title</span>
+        <span class="kanban-column__count badge bg-secondary">@Count</span>
+    </div>
+
+    @* ── Cards ── *@
+    <div class="kanban-column__body">
+        @ChildContent
+    </div>
+
+    @* ── Empty state ── *@
+    @if (Count == 0)
+    {
+        <div class="kanban-column__empty">
+            Drop here
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title      { get; set; } = string.Empty;
+    [Parameter] public int Count                         { get; set; }
+    [Parameter] public string AccentColor                { get; set; } = "#94a3b8";
+    [Parameter] public RenderFragment? ChildContent      { get; set; }
+    [Parameter] public EventCallback OnDropped           { get; set; }
+
+    private bool IsDragOver { get; set; }
+
+    private void OnDragOver(DragEventArgs e)  => IsDragOver = true;
+    private void OnDragLeave(DragEventArgs e) => IsDragOver = false;
+
+    private async Task OnDrop(DragEventArgs e)
+    {
+        IsDragOver = false;
+        await OnDropped.InvokeAsync();
+    }
+}

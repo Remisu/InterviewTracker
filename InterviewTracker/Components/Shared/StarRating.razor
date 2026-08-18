@@ -1,0 +1,36 @@
+@* Clickable 1-5 star rating (or read-only when Readonly=true) *@
+
+<div class="star-rating @(Readonly ? "star-rating--readonly" : "")" title="@(Value.HasValue ? $"{Value}/5" : "Not rated")">
+    @for (int i = 1; i <= 5; i++)
+    {
+        var star = i;
+        <span class="star @(Value >= star ? "star--filled" : "star--empty")"
+              @onclick="() => { if (!Readonly) OnChange(star); }"
+              role="@(Readonly ? null : "button")"
+              aria-label="@star star">&#9733;</span>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Value { get; set; }
+    [Parameter] public EventCallback<int?> ValueChanged { get; set; }
+    [Parameter] public bool Readonly { get; set; }
+
+    private async Task OnChange(int star)
+    {
+        // Clicking the same star clears the rating
+        int? newValue = Value == star ? null : star;
+        await ValueChanged.InvokeAsync(newValue);
+    }
+}
+
+<style>
+    .star-rating { display: inline-flex; gap: 2px; font-size: 1.2rem; line-height: 1; }
+    .star-rating--readonly .star { cursor: default; }
+    .star { cursor: pointer; transition: color .1s; }
+    .star--filled { color: #f5a623; }
+    .star--empty  { color: #ccc; }
+    .star:hover   { color: #f5a623; }
+    .star-rating--readonly .star:hover { color: inherit; }
+    .star-rating--readonly .star--empty:hover { color: #ccc; }
+</style>

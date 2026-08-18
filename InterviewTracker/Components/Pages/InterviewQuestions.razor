@@ -1,0 +1,149 @@
+@page "/interview-questions"
+@inject InterviewService InterviewSvc
+@using InterviewTracker.Models.Enums
+
+<PageTitle>Interview Questions — Interview Tracker</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-question-circle me-2"></i>Interview Questions</h1>
+</div>
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></div>
+}
+else
+{
+    @* Filters *@
+    <div class="it-card mb-3">
+        <div class="row g-2">
+            <div class="col-md-4">
+                <input class="form-control form-control-sm" placeholder="Search question / answer…"
+                       @bind="_search" @bind:after="ApplyFilters" />
+            </div>
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" @bind="_categoryFilter" @bind:after="ApplyFilters">
+                    <option value="">All categories</option>
+                    @foreach (var c in Enum.GetValues<QuestionCategory>())
+                    {
+                        <option value="@c">@EnumHelper.DisplayName(c)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="_reviewFilter" @bind:after="ApplyFilters">
+                    <option value="">All</option>
+                    <option value="review">Needs Review</option>
+                    <option value="correct">Answered ✓</option>
+                    <option value="wrong">Missed ✗</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    @if (_filtered.Count == 0)
+    {
+        <div class="it-card text-center text-muted py-5">
+            <i class="bi bi-question-circle display-5 d-block mb-2"></i>
+            <p class="mb-0">No questions match the current filters.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var q in _filtered)
+            {
+                <div class="col-12">
+                    <div class="it-card">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="fw-semibold flex-grow-1">@q.Question</div>
+                            <div class="ms-2 d-flex gap-1 flex-shrink-0">
+                                @if (q.WasAnsweredCorrectly == true)
+                                {
+                                    <span class="badge bg-success">✓ Answered</span>
+                                }
+                                else if (q.WasAnsweredCorrectly == false)
+                                {
+                                    <span class="badge bg-danger">✗ Missed</span>
+                                }
+                                @if (q.NeedsReview)
+                                {
+                                    <span class="badge bg-warning text-dark">Review</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="small text-muted mt-1">
+                            <span class="badge bg-secondary me-1">@EnumHelper.DisplayName(q.Category)</span>
+                            <a href="/applications/@q.Interview.JobApplicationId">@q.Interview.JobApplication.JobTitle</a>
+                            · @q.Interview.JobApplication.ClientCompany
+                            · @EnumHelper.DisplayName(q.Interview.InterviewType)
+                            @if (q.Interview.ScheduledDate.HasValue) { <span> · @q.Interview.ScheduledDate.Value.ToString("MMM d, yyyy")</span> }
+                        </div>
+                        @if (q.Difficulty.HasValue)
+                        {
+                            <div class="small mt-1">Difficulty: <StarRating Value="q.Difficulty" Readonly="true" /></div>
+                        }
+                        @if (q.MyAnswer is not null)
+                        {
+                            <div class="mt-2 small"><strong>My answer:</strong> @q.MyAnswer</div>
+                        }
+                        @if (q.IdealAnswer is not null)
+                        {
+                            <div class="mt-1 small"><strong>Ideal answer:</strong> @q.IdealAnswer</div>
+                        }
+                        @if (q.Notes is not null)
+                        {
+                            <div class="mt-1 small text-muted" style="white-space:pre-wrap">@q.Notes</div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="mt-2 text-muted small">Showing @_filtered.Count of @_all.Count questions</div>
+    }
+}
+
+@code {
+    private List<InterviewQuestion> _all      = [];
+    private List<InterviewQuestion> _filtered = [];
+    private bool _loading = true;
+
+    private string _search         = "";
+    private string _categoryFilter = "";
+    private string _reviewFilter   = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _all = await InterviewSvc.GetAllQuestionsAsync();
+        ApplyFilters();
+        _loading = false;
+    }
+
+    private void ApplyFilters()
+    {
+        var q = _all.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var s = _search.Trim();
+            q = q.Where(x =>
+                x.Question.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                (x.MyAnswer ?? "").Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                (x.IdealAnswer ?? "").Contains(s, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_categoryFilter) && Enum.TryParse<QuestionCategory>(_categoryFilter, out var catEnum))
+            q = q.Where(x => x.Category == catEnum);
+
+        q = _reviewFilter switch
+        {
+            "review"  => q.Where(x => x.NeedsReview),
+            "correct" => q.Where(x => x.WasAnsweredCorrectly == true),
+            "wrong"   => q.Where(x => x.WasAnsweredCorrectly == false),
+            _         => q
+        };
+
+        _filtered = q.ToList();
+    }
+}

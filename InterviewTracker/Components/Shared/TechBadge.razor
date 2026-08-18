@@ -1,0 +1,7 @@
+@* Renders a compact technology tag badge *@
+
+<span class="badge tech-badge" title="@Technology">@Technology</span>
+
+@code {
+    [Parameter, EditorRequired] public string Technology { get; set; } = string.Empty;
+}

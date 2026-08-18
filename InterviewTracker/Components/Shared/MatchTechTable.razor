@@ -1,0 +1,52 @@
+@* Inner table used by JobMatchDetails — not intended for direct use *@
+
+<div class="table-responsive mb-1">
+    <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Technology</th>
+                <th>Category</th>
+                <th class="text-center">Required&nbsp;Yrs</th>
+                <th class="text-center">My&nbsp;Yrs</th>
+                <th class="text-center">Match</th>
+                <th>Level</th>
+                <th class="text-center">Must</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var d in Details)
+            {
+                var pct = (int)Math.Round(d.TechScore * 100);
+                <tr>
+                    <td class="fw-semibold">@d.TechnologyName</td>
+                    <td class="small text-muted">@d.Category</td>
+                    <td class="text-center small">@(d.RequiredYears?.ToString() ?? "—")</td>
+                    <td class="text-center small @(d.MyYears is null ? "text-danger" : "")">
+                        @(d.MyYears?.ToString() ?? "—")
+                    </td>
+                    <td class="text-center" style="min-width:90px">
+                        <div class="progress" style="height:6px;min-width:60px">
+                            <div class="progress-bar @BarClass(pct)" style="width:@(pct)%"></div>
+                        </div>
+                        <div class="small mt-1">@pct%</div>
+                    </td>
+                    <td class="small">@d.RequirementLevel</td>
+                    <td class="text-center">
+                        @if (d.IsMandatory)
+                        {
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<TechMatchDetail> Details { get; set; } = [];
+
+    private static string BarClass(int pct) => pct >= 100 ? "bg-success"
+        : pct >= 60 ? "bg-warning"
+        : "bg-danger";
+}

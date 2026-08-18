@@ -1,0 +1,171 @@
+@page "/interviews"
+@inject InterviewService InterviewSvc
+@using InterviewTracker.Models.Enums
+
+<PageTitle>Interviews — Interview Tracker</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-calendar-check me-2"></i>Interviews</h1>
+</div>
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></div>
+}
+else
+{
+    @* Upcoming *@
+    @if (_upcoming.Count > 0)
+    {
+        <h5 class="fw-bold mb-3">
+            <i class="bi bi-alarm me-1 text-warning"></i>Upcoming (@_upcoming.Count)
+        </h5>
+        <div class="row g-3 mb-4">
+            @foreach (var iv in _upcoming)
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="it-card h-100 border-start border-warning border-3">
+                        <div class="fw-semibold">@EnumHelper.DisplayName(iv.InterviewType)</div>
+                        <div class="small text-muted">
+                            <a href="/applications/@iv.JobApplicationId">@iv.JobApplication.JobTitle</a>
+                            · @iv.JobApplication.ClientCompany
+                        </div>
+                        @if (iv.ScheduledDate.HasValue)
+                        {
+                            var daysUntil = (int)(iv.ScheduledDate.Value.Date - DateTime.UtcNow.Date).TotalDays;
+                            <div class="mt-1 small @(daysUntil == 0 ? "text-warning fw-semibold" : daysUntil < 0 ? "text-danger" : "")">
+                                <i class="bi bi-calendar3 me-1"></i>@iv.ScheduledDate.Value.ToString("MMM d, yyyy HH:mm")
+                                @if (daysUntil == 0) { <span> · Today</span> }
+                                else if (daysUntil == 1) { <span> · Tomorrow</span> }
+                                else if (daysUntil < 0) { <span> · Overdue</span> }
+                            </div>
+                        }
+                        @if (iv.Interviewer is not null) { <div class="small text-muted mt-1"><i class="bi bi-person me-1"></i>@iv.Interviewer</div> }
+                        @if (iv.LocationOrMeetingUrl is not null) { <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i>@iv.LocationOrMeetingUrl</div> }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @* Filters *@
+    <div class="it-card mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <input class="form-control form-control-sm" placeholder="Search…"
+                       @bind="_search" @bind:after="ApplyFilters" />
+            </div>
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" @bind="_statusFilter" @bind:after="ApplyFilters">
+                    <option value="">All statuses</option>
+                    @foreach (var s in Enum.GetValues<InterviewStatus>())
+                    {
+                        <option value="@s">@EnumHelper.DisplayName(s)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" @bind="_typeFilter" @bind:after="ApplyFilters">
+                    <option value="">All types</option>
+                    @foreach (var t in Enum.GetValues<InterviewType>())
+                    {
+                        <option value="@t">@EnumHelper.DisplayName(t)</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    @* List *@
+    @if (_filtered.Count == 0)
+    {
+        <div class="it-card text-center text-muted py-5">
+            <i class="bi bi-calendar-x display-5 d-block mb-2"></i>
+            <p class="mb-0">No interviews match the current filters.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive it-card p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Type</th>
+                        <th>Application</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Interviewer</th>
+                        <th>Difficulty</th>
+                        <th>Performance</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var iv in _filtered)
+                    {
+                        <tr>
+                            <td class="align-middle">@EnumHelper.DisplayName(iv.InterviewType)</td>
+                            <td class="align-middle">
+                                <a href="/applications/@iv.JobApplicationId">@iv.JobApplication.JobTitle</a>
+                                <div class="small text-muted">@iv.JobApplication.ClientCompany</div>
+                            </td>
+                            <td class="align-middle small">@(iv.ScheduledDate?.ToString("MMM d, yyyy HH:mm") ?? "—")</td>
+                            <td class="align-middle">
+                                <span class="badge @EnumHelper.BadgeClass(iv.Status)">@EnumHelper.DisplayName(iv.Status)</span>
+                            </td>
+                            <td class="align-middle small">@(iv.Interviewer ?? "—")</td>
+                            <td class="align-middle"><StarRating Value="iv.Difficulty" Readonly="true" /></td>
+                            <td class="align-middle"><StarRating Value="iv.PerformanceRating" Readonly="true" /></td>
+                            <td class="align-middle text-end">
+                                <a href="/applications/@iv.JobApplicationId" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-arrow-right"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private List<Interview> _all      = [];
+    private List<Interview> _upcoming = [];
+    private List<Interview> _filtered = [];
+    private bool _loading = true;
+
+    private string _search       = "";
+    private string _statusFilter = "";
+    private string _typeFilter   = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _all      = await InterviewSvc.GetAllAsync();
+        _upcoming = await InterviewSvc.GetAllUpcomingAsync();
+        ApplyFilters();
+        _loading = false;
+    }
+
+    private void ApplyFilters()
+    {
+        var q = _all.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var s = _search.Trim();
+            q = q.Where(iv =>
+                iv.JobApplication.JobTitle.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                iv.JobApplication.ClientCompany.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                (iv.Interviewer ?? "").Contains(s, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_statusFilter) && Enum.TryParse<InterviewStatus>(_statusFilter, out var statusEnum))
+            q = q.Where(iv => iv.Status == statusEnum);
+
+        if (!string.IsNullOrWhiteSpace(_typeFilter) && Enum.TryParse<InterviewType>(_typeFilter, out var typeEnum))
+            q = q.Where(iv => iv.InterviewType == typeEnum);
+
+        _filtered = q.ToList();
+    }
+}

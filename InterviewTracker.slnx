@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="InterviewTracker.Client/InterviewTracker.Client.csproj" />
+  <Project Path="InterviewTracker/InterviewTracker.csproj" />
+</Solution>

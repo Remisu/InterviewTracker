@@ -1,0 +1,66 @@
+@* Full match breakdown panel — Strong / Partial / Missing *@
+
+@if (Result is null)
+{
+    return;
+}
+
+@if (!Result.HasRequirements)
+{
+    <div class="alert alert-secondary py-2 small mb-0">
+        <i class="bi bi-info-circle me-1"></i>
+        No technology requirements have been added to this application.
+        Match scoring requires at least one requirement.
+    </div>
+    return;
+}
+
+<div class="match-details">
+
+    @* ── Score header ── *@
+    <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="match-score-circle bg-@Result.Color">
+            @Result.Score%
+        </div>
+        <div>
+            <div class="fw-bold fs-5">@Result.Label</div>
+            <div class="text-muted small">
+                @Result.StrongMatches.Count strong ·
+                @Result.PartialMatches.Count partial ·
+                @Result.MissingSkills.Count missing
+            </div>
+        </div>
+    </div>
+
+    @* ── Strong matches ── *@
+    @if (Result.StrongMatches.Count > 0)
+    {
+        <h6 class="fw-bold text-success mb-2">
+            <i class="bi bi-check-circle-fill me-1"></i>Strong Matches
+        </h6>
+        <MatchTechTable Details="Result.StrongMatches" />
+    }
+
+    @* ── Partial matches ── *@
+    @if (Result.PartialMatches.Count > 0)
+    {
+        <h6 class="fw-bold text-warning mt-3 mb-2">
+            <i class="bi bi-dash-circle-fill me-1"></i>Partial Matches
+        </h6>
+        <MatchTechTable Details="Result.PartialMatches" />
+    }
+
+    @* ── Missing skills ── *@
+    @if (Result.MissingSkills.Count > 0)
+    {
+        <h6 class="fw-bold text-danger mt-3 mb-2">
+            <i class="bi bi-x-circle-fill me-1"></i>Missing Skills
+        </h6>
+        <MatchTechTable Details="Result.MissingSkills" />
+    }
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public JobMatchResult Result { get; set; } = null!;
+}

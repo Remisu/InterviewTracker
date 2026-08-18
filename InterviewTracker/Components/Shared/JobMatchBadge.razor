@@ -1,0 +1,33 @@
+@* Compact inline badge: "92% Excellent Match" *@
+@* Pass either a pre-calculated JobMatchResult or a raw Score+Label+Color. *@
+
+@if (Result is not null)
+{
+    @if (Result.HasRequirements)
+    {
+        <span class="badge match-badge bg-@Result.Color" title="Job match score">
+            @Result.Score% @Result.Label
+        </span>
+    }
+    else
+    {
+        <span class="badge bg-secondary" title="No technology requirements set">
+            No Requirements
+        </span>
+    }
+}
+else if (Score.HasValue)
+{
+    var (label, color) = JobMatchService.ScoreCategory(Score.Value);
+    <span class="badge match-badge bg-@color" title="Job match score">
+        @Score% @label
+    </span>
+}
+
+@code {
+    /// <summary>Pre-calculated result from JobMatchService.</summary>
+    [Parameter] public JobMatchResult? Result { get; set; }
+
+    /// <summary>Raw score (0-100) — used when only the number is available.</summary>
+    [Parameter] public int? Score { get; set; }
+}

@@ -1,0 +1,66 @@
+@inherits LayoutComponentBase
+
+<div class="app-layout">
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <i class="bi bi-briefcase-fill me-2"></i>
+            <span>Interview Tracker</span>
+        </div>
+        <ul class="sidebar-nav">
+            <li>
+                <NavLink href="/" Match="NavLinkMatch.All">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/kanban">
+                    <i class="bi bi-kanban"></i>
+                    <span>Kanban</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/applications">
+                    <i class="bi bi-file-earmark-text"></i>
+                    <span>Applications</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/interviews">
+                    <i class="bi bi-calendar-check"></i>
+                    <span>Interviews</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/technologies">
+                    <i class="bi bi-cpu"></i>
+                    <span>Technologies</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/profile">
+                    <i class="bi bi-person-circle"></i>
+                    <span>My Profile</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/interview-questions">
+                    <i class="bi bi-question-circle"></i>
+                    <span>Questions</span>
+                </NavLink>
+            </li>
+        </ul>
+    </nav>
+
+    <div class="main-content">
+        <div class="content-area">
+            @Body
+        </div>
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

@@ -1,0 +1,331 @@
+@page "/applications"
+@inject ApplicationService AppService
+@inject TechnologyService TechService
+@inject JobMatchService MatchService
+@inject NavigationManager Nav
+
+<PageTitle>Applications</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-file-earmark-text me-2"></i>Applications</h1>
+    <a href="/applications/new" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>New Application
+    </a>
+</div>
+
+@* ── Filters ── *@
+<div class="it-card mb-3">
+    <div class="row g-2">
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold mb-1">Company / Recruiter</label>
+            <input class="form-control form-control-sm" placeholder="Search company…"
+                   @bind="_filter.Company" @bind:after="OnFilterChange" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold mb-1">Job Title</label>
+            <input class="form-control form-control-sm" placeholder="Search title…"
+                   @bind="_filter.JobTitle" @bind:after="OnFilterChange" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold mb-1">Stage</label>
+            <select class="form-select form-select-sm" @onchange="OnStageChange">
+                <option value="">All Stages</option>
+                @foreach (var s in EnumHelper.AllStages())
+                {
+                    <option value="@((int)s)">@EnumHelper.DisplayName(s)</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold mb-1">Priority</label>
+            <select class="form-select form-select-sm" @onchange="OnPriorityChange">
+                <option value="">All</option>
+                @foreach (var p in EnumHelper.AllPriorities())
+                {
+                    <option value="@((int)p)">@EnumHelper.DisplayName(p)</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold mb-1">Work Mode</label>
+            <select class="form-select form-select-sm" @onchange="OnWorkModeChange">
+                <option value="">All</option>
+                @foreach (var wm in EnumHelper.AllWorkModes())
+                {
+                    <option value="@((int)wm)">@EnumHelper.DisplayName(wm)</option>
+                }
+            </select>
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold mb-1">Technology</label>
+            <select class="form-select form-select-sm" @onchange="OnTechFilterChange">
+                <option value="0">All Technologies</option>
+                @foreach (var t in _allTechs)
+                {
+                    <option value="@t.Id">@t.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto d-flex align-items-end gap-3">
+            <div class="form-check mb-1">
+                <input class="form-check-input" type="checkbox" id="upcomingInterview"
+                       @bind="_filter.HasUpcomingInterview" @bind:after="OnFilterChange" />
+                <label class="form-check-label small" for="upcomingInterview">Upcoming interview</label>
+            </div>
+            <div class="form-check mb-1">
+                <input class="form-check-input" type="checkbox" id="needsFollowup"
+                       @bind="_filter.NeedsFollowUp" @bind:after="OnFilterChange" />
+                <label class="form-check-label small" for="needsFollowup">Needs follow-up</label>
+            </div>
+        </div>
+        <div class="col-auto ms-auto d-flex align-items-end">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">
+                <i class="bi bi-x-circle me-1"></i>Clear
+            </button>
+        </div>
+    </div>
+</div>
+
+@* ── Results ── *@
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></div>
+}
+else if (_applications.Count == 0)
+{
+    <div class="it-card text-center text-muted py-5">
+        <i class="bi bi-inbox display-5 d-block mb-2"></i>
+        No applications found.
+    </div>
+}
+else
+{
+    <div class="it-card p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th @onclick='() => Sort("title")' role="button" class="sortable">
+                            Job Title @SortIcon("title")
+                        </th>
+                        <th @onclick='() => Sort("company")' role="button" class="sortable">
+                            Client @SortIcon("company")
+                        </th>
+                        <th>Recruiter</th>
+                        <th @onclick='() => Sort("stage")' role="button" class="sortable">
+                            Stage @SortIcon("stage")
+                        </th>
+                        <th>Location</th>
+                        <th @onclick='() => Sort("match")' role="button" class="sortable">
+                            Match @SortIcon("match")
+                        </th>
+                        <th @onclick='() => Sort("priority")' role="button" class="sortable">
+                            Priority @SortIcon("priority")
+                        </th>
+                        <th @onclick='() => Sort("applied")' role="button" class="sortable">
+                            Applied @SortIcon("applied")
+                        </th>
+                        <th @onclick='() => Sort("activity")' role="button" class="sortable">
+                            Last Activity @SortIcon("activity")
+                        </th>
+                        <th>Next Interview</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var app in Sorted())
+                    {
+                        var nextInterview = app.Interviews
+                            .Where(i => i.Status == InterviewStatus.Scheduled && i.ScheduledDate >= DateTime.UtcNow)
+                            .OrderBy(i => i.ScheduledDate)
+                            .FirstOrDefault();
+
+                        <tr>
+                            <td>
+                                <a href="/applications/@app.Id" class="fw-semibold text-decoration-none">@app.JobTitle</a>
+                                <div class="small text-muted">@app.City @(app.Country is not null ? $"· {app.Country}" : "")</div>
+                            </td>
+                            <td>@app.ClientCompany</td>
+                            <td class="small text-muted">@app.RecruitingCompany</td>
+                            <td>
+                                @if (app.IsNoResponse)
+                                {
+                                    <span class="badge bg-secondary">No Response</span>
+                                }
+                                else
+                                {
+                                    <span class="@EnumHelper.BadgeClass(app.Stage)">@EnumHelper.DisplayName(app.Stage)</span>
+                                }
+                            </td>
+                            <td class="small">
+                                @app.City@(app.City != null && app.Country != null ? ", " : "")@app.Country
+                                @if (app.WorkMode != WorkMode.OnSite)
+                                {
+                                    <span class="badge bg-light text-dark ms-1 border">@EnumHelper.DisplayName(app.WorkMode)</span>
+                                }
+                            </td>
+                            <td>
+                                @if (_matchScores.TryGetValue(app.Id, out var mr) && mr.HasRequirements)
+                                {
+                                    <JobMatchBadge Result="mr" />
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td><span class="@EnumHelper.BadgeClass(app.Priority)">@EnumHelper.DisplayName(app.Priority)</span></td>
+                            <td class="small text-muted">@app.AppliedDate?.ToString("MMM d, yyyy")</td>
+                            <td class="small text-muted">
+                                @if (app.DaysSinceLastActivity is int days)
+                                {
+                                    @(days == 0 ? "Today" : days == 1 ? "Yesterday" : $"{days}d ago")
+                                }
+                            </td>
+                            <td class="small">
+                                @if (nextInterview is not null)
+                                {
+                                    <span class="text-primary fw-semibold">
+                                        @nextInterview.ScheduledDate?.ToString("MMM d")
+                                    </span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <a href="/applications/@app.Id/edit" class="btn btn-link btn-sm p-0 me-1" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button class="btn btn-link btn-sm p-0 text-danger" title="Delete"
+                                        @onclick="() => AskDelete(app)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="text-muted small mt-2 ms-1">@_applications.Count application(s)</div>
+}
+
+<ConfirmDialog Visible="_deleteVisible"
+               Title="Delete Application"
+               Message=@($"Delete '{_deleteTarget?.JobTitle}' at '{_deleteTarget?.ClientCompany}'? This cannot be undone.")
+               OnConfirm="ConfirmDeleteAsync"
+               OnCancel="() => _deleteVisible = false" />
+
+@code {
+    private List<JobApplication> _applications = [];
+    private Dictionary<int, JobMatchResult> _matchScores = [];
+    private List<Technology> _allTechs = [];
+    private ApplicationFilter _filter = new();
+    private bool _loading = true;
+
+    private string _sortField = "activity";
+    private bool _sortAsc;
+
+    private bool _deleteVisible;
+    private JobApplication? _deleteTarget;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allTechs = await TechService.GetAllAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _applications = await AppService.GetFilteredAsync(_filter);
+        _matchScores = await MatchService.CalculateBatchAsync(_applications);
+        _loading = false;
+    }
+
+    private async Task OnFilterChange() => await LoadAsync();
+
+    private void OnStageChange(ChangeEventArgs e)
+    {
+        _filter.Stage = string.IsNullOrEmpty(e.Value?.ToString())
+            ? null : (ApplicationStage)int.Parse(e.Value.ToString()!);
+        _ = LoadAsync();
+    }
+
+    private void OnPriorityChange(ChangeEventArgs e)
+    {
+        _filter.Priority = string.IsNullOrEmpty(e.Value?.ToString())
+            ? null : (Priority)int.Parse(e.Value.ToString()!);
+        _ = LoadAsync();
+    }
+
+    private void OnWorkModeChange(ChangeEventArgs e)
+    {
+        _filter.WorkMode = string.IsNullOrEmpty(e.Value?.ToString())
+            ? null : (WorkMode)int.Parse(e.Value.ToString()!);
+        _ = LoadAsync();
+    }
+
+    private void OnTechFilterChange(ChangeEventArgs e)
+    {
+        var val = int.Parse(e.Value?.ToString() ?? "0");
+        _filter.TechnologyId = val == 0 ? null : val;
+        _ = LoadAsync();
+    }
+
+    private async Task ClearFilters()
+    {
+        _filter = new ApplicationFilter();
+        await LoadAsync();
+    }
+
+    private void Sort(string field)
+    {
+        if (_sortField == field) _sortAsc = !_sortAsc;
+        else { _sortField = field; _sortAsc = true; }
+    }
+
+    private IEnumerable<JobApplication> Sorted()
+    {
+        return (_sortField, _sortAsc) switch
+        {
+            ("title",    true)  => _applications.OrderBy(a => a.JobTitle),
+            ("title",    false) => _applications.OrderByDescending(a => a.JobTitle),
+            ("company",  true)  => _applications.OrderBy(a => a.ClientCompany),
+            ("company",  false) => _applications.OrderByDescending(a => a.ClientCompany),
+            ("stage",    true)  => _applications.OrderBy(a => a.Stage),
+            ("stage",    false) => _applications.OrderByDescending(a => a.Stage),
+            ("priority", true)  => _applications.OrderBy(a => a.Priority),
+            ("priority", false) => _applications.OrderByDescending(a => a.Priority),
+            ("applied",  true)  => _applications.OrderBy(a => a.AppliedDate),
+            ("applied",  false) => _applications.OrderByDescending(a => a.AppliedDate),
+            ("match",    true)  => _applications.OrderBy(a => _matchScores.GetValueOrDefault(a.Id)?.Score ?? -1),
+            ("match",    false) => _applications.OrderByDescending(a => _matchScores.GetValueOrDefault(a.Id)?.Score ?? -1),
+            ("activity", true)  => _applications.OrderBy(a => a.LastActivityDate),
+            _                   => _applications.OrderByDescending(a => a.LastActivityDate)
+        };
+    }
+
+    private MarkupString SortIcon(string field)
+    {
+        if (_sortField != field) return new MarkupString("<i class='bi bi-chevron-expand text-muted ms-1' style='font-size:0.7rem'></i>");
+        return _sortAsc
+            ? new MarkupString("<i class='bi bi-chevron-up ms-1' style='font-size:0.7rem'></i>")
+            : new MarkupString("<i class='bi bi-chevron-down ms-1' style='font-size:0.7rem'></i>");
+    }
+
+    private void AskDelete(JobApplication app)
+    {
+        _deleteTarget = app;
+        _deleteVisible = true;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleteTarget is null) return;
+        await AppService.DeleteAsync(_deleteTarget.Id);
+        _deleteVisible = false;
+        _deleteTarget = null;
+        await LoadAsync();
+    }
+}

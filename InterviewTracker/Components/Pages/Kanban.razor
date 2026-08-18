@@ -1,0 +1,320 @@
+@page "/kanban"
+@inject ApplicationService AppService
+@inject JobMatchService MatchService
+@inject TechnologyService TechService
+@inject NavigationManager Nav
+
+<PageTitle>Kanban — Interview Tracker</PageTitle>
+
+@* ── Page header ── *@
+<div class="page-header">
+    <h1><i class="bi bi-kanban me-2"></i>Kanban Board</h1>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleFilters">
+            <i class="bi bi-funnel me-1"></i>Filters
+            @if (HasActiveFilters)
+            {
+                <span class="badge bg-primary ms-1">!</span>
+            }
+        </button>
+        <a href="/applications/new" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i>New Application
+        </a>
+    </div>
+</div>
+
+@* ── Filter panel ── *@
+@if (_filtersVisible)
+{
+    <div class="it-card mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold mb-1">Search</label>
+                <input class="form-control form-control-sm" placeholder="Title or company…"
+                       @bind="_filterText" @bind:after="ApplyFilters" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Priority</label>
+                <select class="form-select form-select-sm" @onchange="OnPriorityChange">
+                    <option value="">All</option>
+                    @foreach (var p in EnumHelper.AllPriorities())
+                    {
+                        <option value="@((int)p)">@EnumHelper.DisplayName(p)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Work Mode</label>
+                <select class="form-select form-select-sm" @onchange="OnWorkModeChange">
+                    <option value="">All</option>
+                    @foreach (var wm in EnumHelper.AllWorkModes())
+                    {
+                        <option value="@((int)wm)">@EnumHelper.DisplayName(wm)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold mb-1">Technology</label>
+                <select class="form-select form-select-sm" @onchange="OnTechFilterChange">
+                    <option value="0">All Technologies</option>
+                    @foreach (var t in _allTechs)
+                    {
+                        <option value="@t.Id">@t.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="checkbox" id="noResponseOnly"
+                           @bind="_filterNoResponse" @bind:after="ApplyFilters" />
+                    <label class="form-check-label small" for="noResponseOnly">No Response only</label>
+                </div>
+            </div>
+        </div>
+        <div class="mt-2 d-flex justify-content-end">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">
+                <i class="bi bi-x-circle me-1"></i>Clear
+            </button>
+        </div>
+    </div>
+}
+
+@* ── Loading ── *@
+@if (_loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+    </div>
+}
+else
+{
+    @* ── Board ── *@
+    <div class="kanban-board">
+        @foreach (var col in _columns)
+        {
+            var colStage   = col.Stage;
+            var colCards   = CardsFor(colStage);
+            var colAccent  = ColumnAccent(colStage);
+
+            <KanbanColumn Title="@col.Label"
+                          Count="@colCards.Count"
+                          AccentColor="@colAccent"
+                          OnDropped="() => OnDroppedAsync(colStage)">
+                @foreach (var app in colCards)
+                {
+                    var appRef = app;
+                    _matchScores.TryGetValue(app.Id, out var mr);
+                    <KanbanCard App="appRef"
+                                MatchResult="mr"
+                                OnDragStarted="OnCardDragStarted"
+                                OnStageMoved="stage => OnCardStageMoved(appRef.Id, stage)" />
+                }
+            </KanbanColumn>
+        }
+
+        @* ── Virtual No Response column ── *@
+        @{
+            var noResponseCards = _filtered.Where(a => a.IsNoResponse).ToList();
+        }
+        @if (noResponseCards.Count > 0 || _filterNoResponse)
+        {
+            <KanbanColumn Title="No Response"
+                          Count="@noResponseCards.Count"
+                          AccentColor="#ef4444"
+                          OnDropped="() => Task.CompletedTask">
+                @foreach (var app in noResponseCards)
+                {
+                    var appRef = app;
+                    _matchScores.TryGetValue(app.Id, out var mr);
+                    <KanbanCard App="appRef"
+                                MatchResult="mr"
+                                OnDragStarted="OnCardDragStarted"
+                                OnStageMoved="stage => OnCardStageMoved(appRef.Id, stage)" />
+                }
+            </KanbanColumn>
+        }
+    </div>
+
+    @* ── Legend ── *@
+    <div class="mt-2 text-muted small">
+        @_filtered.Count application(s) shown
+        @if (_filtered.Any(a => a.IsNoResponse))
+        {
+            <span class="ms-3 text-danger">
+                <i class="bi bi-clock me-1"></i>@noResponseCards.Count with no response
+            </span>
+        }
+    </div>
+}
+
+@code {
+    // ── Column definitions ────────────────────────────────────────────────────
+    private record ColumnDef(ApplicationStage Stage, string Label);
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new(ApplicationStage.Interested,          "Interested"),
+        new(ApplicationStage.Applied,             "Applied"),
+        new(ApplicationStage.Waiting,             "Waiting"),
+        new(ApplicationStage.RecruiterScreening,  "Recruiter Screening"),
+        new(ApplicationStage.Interview,           "Interview"),
+        new(ApplicationStage.TechnicalAssessment, "Technical Assessment"),
+        new(ApplicationStage.ClientInterview,     "Client Interview"),
+        new(ApplicationStage.FinalInterview,      "Final Interview"),
+        new(ApplicationStage.Offer,               "Offer"),
+        new(ApplicationStage.Accepted,            "Accepted"),
+        new(ApplicationStage.Rejected,            "Rejected"),
+        new(ApplicationStage.Withdrawn,           "Withdrawn"),
+    ];
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    private List<JobApplication> _all       = [];
+    private List<JobApplication> _filtered  = [];
+    private Dictionary<int, JobMatchResult> _matchScores = [];
+    private List<Technology>     _allTechs  = [];
+    private bool _loading       = true;
+    private bool _filtersVisible = false;
+
+    // Filters
+    private string   _filterText       = string.Empty;
+    private Priority? _filterPriority  = null;
+    private WorkMode? _filterWorkMode  = null;
+    private int?     _filterTechId     = null;
+    private bool     _filterNoResponse = false;
+
+    // Drag state
+    private int _draggingAppId;
+
+    private bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(_filterText)
+        || _filterPriority.HasValue
+        || _filterWorkMode.HasValue
+        || _filterTechId.HasValue
+        || _filterNoResponse;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        _allTechs = await TechService.GetAllAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _all = await AppService.GetAllAsync();
+        _matchScores = await MatchService.CalculateBatchAsync(_all);
+        ApplyFilters();
+        _loading = false;
+    }
+
+    // ── Filtering ─────────────────────────────────────────────────────────────
+    private void ApplyFilters()
+    {
+        var q = _all.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_filterText))
+        {
+            var t = _filterText.ToLowerInvariant();
+            q = q.Where(a =>
+                a.JobTitle.ToLowerInvariant().Contains(t) ||
+                a.ClientCompany.ToLowerInvariant().Contains(t) ||
+                (a.RecruitingCompany?.ToLowerInvariant().Contains(t) ?? false));
+        }
+
+        if (_filterPriority.HasValue)
+            q = q.Where(a => a.Priority == _filterPriority.Value);
+
+        if (_filterWorkMode.HasValue)
+            q = q.Where(a => a.WorkMode == _filterWorkMode.Value);
+
+        if (_filterTechId.HasValue)
+            q = q.Where(a => a.TechnologyRequirements.Any(r => r.TechnologyId == _filterTechId.Value));
+
+        if (_filterNoResponse)
+            q = q.Where(a => a.IsNoResponse);
+
+        _filtered = q.ToList();
+    }
+
+    private void ToggleFilters() => _filtersVisible = !_filtersVisible;
+
+    private void ClearFilters()
+    {
+        _filterText = string.Empty;
+        _filterPriority = null;
+        _filterWorkMode = null;
+        _filterTechId = null;
+        _filterNoResponse = false;
+        ApplyFilters();
+    }
+
+    private void OnPriorityChange(ChangeEventArgs e)
+    {
+        _filterPriority = string.IsNullOrEmpty(e.Value?.ToString())
+            ? null : (Priority)int.Parse(e.Value.ToString()!);
+        ApplyFilters();
+    }
+
+    private void OnWorkModeChange(ChangeEventArgs e)
+    {
+        _filterWorkMode = string.IsNullOrEmpty(e.Value?.ToString())
+            ? null : (WorkMode)int.Parse(e.Value.ToString()!);
+        ApplyFilters();
+    }
+
+    private void OnTechFilterChange(ChangeEventArgs e)
+    {
+        var val = int.Parse(e.Value?.ToString() ?? "0");
+        _filterTechId = val == 0 ? null : val;
+        ApplyFilters();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private List<JobApplication> CardsFor(ApplicationStage stage)
+        => _filtered
+            .Where(a => a.Stage == stage)
+            .OrderByDescending(a => a.Priority)
+            .ThenBy(a => a.LastActivityDate)
+            .ToList();
+
+    private static string ColumnAccent(ApplicationStage stage) => stage switch
+    {
+        ApplicationStage.Interested          => "#94a3b8",
+        ApplicationStage.Applied             => "#60a5fa",
+        ApplicationStage.Waiting             => "#818cf8",
+        ApplicationStage.RecruiterScreening  => "#f59e0b",
+        ApplicationStage.Interview           => "#f59e0b",
+        ApplicationStage.TechnicalAssessment => "#f97316",
+        ApplicationStage.ClientInterview     => "#f97316",
+        ApplicationStage.FinalInterview      => "#fb923c",
+        ApplicationStage.Offer               => "#22c55e",
+        ApplicationStage.Accepted            => "#16a34a",
+        ApplicationStage.Rejected            => "#ef4444",
+        ApplicationStage.Withdrawn           => "#6b7280",
+        ApplicationStage.NoResponse          => "#ef4444",
+        _                                    => "#94a3b8",
+    };
+
+    // ── Drag & Drop ───────────────────────────────────────────────────────────
+    private void OnCardDragStarted(int appId) => _draggingAppId = appId;
+
+    private async Task OnDroppedAsync(ApplicationStage targetStage)
+    {
+        if (_draggingAppId == 0) return;
+
+        var app = _all.FirstOrDefault(a => a.Id == _draggingAppId);
+        if (app is null || app.Stage == targetStage) return;
+
+        await AppService.UpdateStageAsync(_draggingAppId, targetStage);
+        _draggingAppId = 0;
+        await LoadAsync();
+    }
+
+    private async Task OnCardStageMoved(int appId, ApplicationStage stage)
+    {
+        await AppService.UpdateStageAsync(appId, stage);
+        await LoadAsync();
+    }
+}
+
