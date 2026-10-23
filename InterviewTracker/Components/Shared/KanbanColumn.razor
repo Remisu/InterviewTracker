@@ -1,6 +1,6 @@
 @* One column of the Kanban board *@
 
-<div class="kanban-column @(IsDragOver ? "kanban-column--drag-over" : "")"
+<div class="kanban-column @(Compact ? "kanban-column--compact" : "") @(IsDragOver ? "kanban-column--drag-over" : "")"
      style="--col-accent: @AccentColor"
      @ondragover:preventDefault="true"
      @ondragover="OnDragOver"
@@ -30,6 +30,7 @@
 
 @code {
     [Parameter, EditorRequired] public string Title      { get; set; } = string.Empty;
+    [Parameter] public bool Compact { get; set; }
     [Parameter] public int Count                         { get; set; }
     [Parameter] public string AccentColor                { get; set; } = "#94a3b8";
     [Parameter] public RenderFragment? ChildContent      { get; set; }

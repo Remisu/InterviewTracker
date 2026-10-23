@@ -33,8 +33,8 @@ else
                     <span class="ms-1">· @_app.City@(_app.City != null && _app.Country != null ? ", " : "")@_app.Country</span>
                 }
                 <span class="ms-2">
-                    <span class="@EnumHelper.BadgeClass(_app.IsNoResponse ? ApplicationStage.NoResponse : _app.Stage)">
-                        @(_app.IsNoResponse ? "No Response" : EnumHelper.DisplayName(_app.Stage))
+                    <span class="@EnumHelper.BadgeClass(_app.Stage)">
+                        @(EnumHelper.DisplayName(_app.Stage))
                     </span>
                     <span class="@EnumHelper.BadgeClass(_app.Priority) ms-1">@EnumHelper.DisplayName(_app.Priority)</span>
                     @if (_matchResult is not null && _matchResult.HasRequirements)
@@ -669,7 +669,7 @@ else
                                     <div class="small text-muted" style="white-space:pre-wrap">@act.Description</div>
                                 }
                                 <div class="small text-muted mt-1">
-                                    @act.ActivityDate.ToString("MMM d, yyyy HH:mm")
+                                    @DateTime.SpecifyKind(act.ActivityDate, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy HH:mm")
                                     @if (!act.IsManual) { <span class="badge bg-secondary ms-1" style="font-size:.65rem">auto</span> }
                                 </div>
                                 @if (act.FollowUpDate.HasValue)
@@ -720,7 +720,7 @@ else
                                 <label class="form-label small fw-semibold">Date</label>
                                 <input class="form-control form-control-sm" type="datetime-local"
                                        value="@(_activityEdit.ActivityDate.ToString("yyyy-MM-ddTHH:mm"))"
-                                       @onchange="e => _activityEdit.ActivityDate = string.IsNullOrEmpty(e.Value?.ToString()) ? DateTime.UtcNow : DateTime.Parse(e.Value!.ToString()!)" />
+                                       @onchange="e => _activityEdit.ActivityDate = string.IsNullOrEmpty(e.Value?.ToString()) ? DateTime.Now : DateTime.Parse(e.Value!.ToString()!)" />
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small fw-semibold">Follow-up Date</label>
@@ -986,7 +986,7 @@ else
         _activityEdit = new ApplicationActivity
         {
             JobApplicationId = Id,
-            ActivityDate = DateTime.UtcNow,
+            ActivityDate = DateTime.Now,
             ActivityType = ActivityType.Note
         };
         _activityFormOpen = true;
@@ -997,7 +997,8 @@ else
         _activityEdit = new ApplicationActivity
         {
             Id = a.Id, JobApplicationId = a.JobApplicationId, ActivityType = a.ActivityType,
-            Title = a.Title, Description = a.Description, ActivityDate = a.ActivityDate,
+            Title = a.Title, Description = a.Description,
+            ActivityDate = DateTime.SpecifyKind(a.ActivityDate, DateTimeKind.Utc).ToLocalTime(),
             ContactId = a.ContactId, FollowUpDate = a.FollowUpDate, IsManual = a.IsManual
         };
         _activityFormOpen = true;

@@ -3,6 +3,8 @@
 @inject ApplicationService AppService
 @inject TechnologyService TechService
 @inject NavigationManager Nav
+@inject NotificationService Notifications
+@inject ILogger<ApplicationEdit> Logger
 
 <PageTitle>@(_isNew ? "New Application" : "Edit Application")</PageTitle>
 
@@ -27,19 +29,20 @@ else
 {
     <EditForm Model="_app" OnValidSubmit="SaveAsync">
         <DataAnnotationsValidator />
+        <ValidationSummary class="text-danger small" />
 
         @* ── Section: Core info ── *@
         <div class="it-card mb-3">
             <h6 class="fw-bold mb-3">Position</h6>
             <div class="row g-3">
                 <div class="col-md-5">
-                    <label class="form-label small fw-semibold">Job Title *</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.JobTitle" />
+                    <label class="form-label small fw-semibold" for="app-jobtitle">Job Title *</label>
+                    <InputText id="app-jobtitle" class="form-control form-control-sm" @bind-Value="_app.JobTitle" />
                     <ValidationMessage For="() => _app.JobTitle" class="text-danger small" />
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Employment Type</label>
-                    <InputSelect class="form-select form-select-sm" @bind-Value="_app.EmploymentType">
+                    <label class="form-label small fw-semibold" for="app-employmenttype">Employment Type</label>
+                    <InputSelect id="app-employmenttype" class="form-select form-select-sm" @bind-Value="_app.EmploymentType">
                         @foreach (var et in EnumHelper.AllEmploymentTypes())
                         {
                             <option value="@et">@EnumHelper.DisplayName(et)</option>
@@ -47,8 +50,8 @@ else
                     </InputSelect>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold">Priority</label>
-                    <InputSelect class="form-select form-select-sm" @bind-Value="_app.Priority">
+                    <label class="form-label small fw-semibold" for="app-priority">Interest Level</label>
+                    <InputSelect id="app-priority" class="form-select form-select-sm" @bind-Value="_app.Priority">
                         @foreach (var p in EnumHelper.AllPriorities())
                         {
                             <option value="@p">@EnumHelper.DisplayName(p)</option>
@@ -56,9 +59,9 @@ else
                     </InputSelect>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold">Stage</label>
-                    <InputSelect class="form-select form-select-sm" @bind-Value="_app.Stage">
-                        @foreach (var s in EnumHelper.AllStages())
+                    <label class="form-label small fw-semibold" for="app-stage">Stage</label>
+                    <InputSelect id="app-stage" class="form-select form-select-sm" @bind-Value="_app.Stage">
+                        @foreach (var s in ApplicationWorkflow.Stages.Concat(!ApplicationWorkflow.Stages.Contains(_app.Stage) ? new[] { _app.Stage } : Array.Empty<ApplicationStage>()))
                         {
                             <option value="@s">@EnumHelper.DisplayName(s)</option>
                         }
@@ -67,35 +70,36 @@ else
             </div>
             <div class="row g-3 mt-1">
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Job URL</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.JobUrl" />
+                    <label class="form-label small fw-semibold" for="app-joburl">Job URL</label>
+                    <InputText id="app-joburl" class="form-control form-control-sm" @bind-Value="_app.JobUrl" />
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Job Reference / ID</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.JobReference" />
+                    <label class="form-label small fw-semibold" for="app-jobreference">Job Reference / ID</label>
+                    <InputText id="app-jobreference" class="form-control form-control-sm" @bind-Value="_app.JobReference" />
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Date Applied</label>
-                    <InputDate class="form-control form-control-sm" @bind-Value="_app.AppliedDate" />
+                    <label class="form-label small fw-semibold" for="app-applieddate">Date Applied</label>
+                    <InputDate id="app-applieddate" class="form-control form-control-sm" @bind-Value="_app.AppliedDate" />
                 </div>
             </div>
         </div>
 
         @* ── Section: Company ── *@
         <div class="it-card mb-3">
-            <h6 class="fw-bold mb-3">Company</h6>
+            <h6 class="fw-bold mb-2">Company</h6>
+            <p class="text-muted small">Provide at least one company below.</p>
             <div class="row g-3">
                 <div class="col-md-5">
-                    <label class="form-label small fw-semibold">Client Company *</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.ClientCompany" />
+                    <label class="form-label small fw-semibold" for="client-company">Client Company</label>
+                    <InputText class="form-control form-control-sm" id="client-company" @bind-Value="_app.ClientCompany" />
                     <ValidationMessage For="() => _app.ClientCompany" class="text-danger small" />
                 </div>
                 <div class="col-md-5">
-                    <label class="form-label small fw-semibold">
+                    <label class="form-label small fw-semibold" for="recruiting-company">
                         Recruiting Company
                         <span class="text-muted fw-normal">(if different from client)</span>
                     </label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.RecruitingCompany" />
+                    <InputText id="recruiting-company" class="form-control form-control-sm" @bind-Value="_app.RecruitingCompany" />
                 </div>
             </div>
         </div>
@@ -105,16 +109,16 @@ else
             <h6 class="fw-bold mb-3">Location</h6>
             <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">City</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.City" />
+                    <label class="form-label small fw-semibold" for="app-city">City</label>
+                    <InputText id="app-city" class="form-control form-control-sm" @bind-Value="_app.City" />
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Country</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.Country" />
+                    <label class="form-label small fw-semibold" for="app-country">Country</label>
+                    <InputText id="app-country" class="form-control form-control-sm" @bind-Value="_app.Country" />
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold">Work Mode</label>
-                    <InputSelect class="form-select form-select-sm" @bind-Value="_app.WorkMode">
+                    <label class="form-label small fw-semibold" for="app-workmode">Work Mode</label>
+                    <InputSelect id="app-workmode" class="form-select form-select-sm" @bind-Value="_app.WorkMode">
                         @foreach (var wm in EnumHelper.AllWorkModes())
                         {
                             <option value="@wm">@EnumHelper.DisplayName(wm)</option>
@@ -141,16 +145,16 @@ else
             <h6 class="fw-bold mb-3">Compensation</h6>
             <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Salary Min</label>
-                    <InputNumber class="form-control form-control-sm" @bind-Value="_app.SalaryMin" />
+                    <label class="form-label small fw-semibold" for="app-salarymin">Salary Min</label>
+                    <InputNumber id="app-salarymin" class="form-control form-control-sm" @bind-Value="_app.SalaryMin" />
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Salary Max</label>
-                    <InputNumber class="form-control form-control-sm" @bind-Value="_app.SalaryMax" />
+                    <label class="form-label small fw-semibold" for="app-salarymax">Salary Max</label>
+                    <InputNumber id="app-salarymax" class="form-control form-control-sm" @bind-Value="_app.SalaryMax" />
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold">Currency</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.Currency" placeholder="JPY" />
+                    <label class="form-label small fw-semibold" for="app-currency">Currency</label>
+                    <InputText id="app-currency" class="form-control form-control-sm" @bind-Value="_app.Currency" placeholder="JPY" />
                 </div>
             </div>
         </div>
@@ -160,14 +164,22 @@ else
             <h6 class="fw-bold mb-3">Language Requirements</h6>
             <div class="row g-3">
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Japanese Level Required</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.JapaneseLevelRequired"
-                               placeholder="e.g. JLPT N2, Business" />
+                    <label class="form-label small fw-semibold" for="app-japaneselevelrequired">Japanese Level</label>
+                    <InputSelect id="app-japaneselevelrequired" class="form-select form-select-sm" @bind-Value="_app.JapaneseLevelRequired">
+                        <option value="">Not specified</option>
+                        @if (!string.IsNullOrEmpty(_app.JapaneseLevelRequired) && !_japaneseLevels.Contains(_app.JapaneseLevelRequired))
+                        { <option value="@_app.JapaneseLevelRequired">@_app.JapaneseLevelRequired (existing value)</option> }
+                        @foreach (var level in _japaneseLevels) { <option value="@level">@level</option> }
+                    </InputSelect>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold">English Level Required</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_app.EnglishLevelRequired"
-                               placeholder="e.g. Business, Native" />
+                    <label class="form-label small fw-semibold" for="app-englishlevelrequired">English Level</label>
+                    <InputSelect id="app-englishlevelrequired" class="form-select form-select-sm" @bind-Value="_app.EnglishLevelRequired">
+                        <option value="">Not specified</option>
+                        @if (!string.IsNullOrEmpty(_app.EnglishLevelRequired) && !_englishLevels.Contains(_app.EnglishLevelRequired))
+                        { <option value="@_app.EnglishLevelRequired">@_app.EnglishLevelRequired (existing value)</option> }
+                        @foreach (var level in _englishLevels) { <option value="@level">@level</option> }
+                    </InputSelect>
                 </div>
             </div>
         </div>
@@ -177,12 +189,12 @@ else
             <h6 class="fw-bold mb-3">Notes & Follow-up</h6>
             <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Next Follow-up Date</label>
-                    <InputDate class="form-control form-control-sm" @bind-Value="_app.NextFollowUpDate" />
+                    <label class="form-label small fw-semibold" for="app-nextfollowupdate">Next Follow-up Date</label>
+                    <InputDate id="app-nextfollowupdate" class="form-control form-control-sm" @bind-Value="_app.NextFollowUpDate" />
                 </div>
                 <div class="col-12">
-                    <label class="form-label small fw-semibold">Notes</label>
-                    <InputTextArea class="form-control form-control-sm" rows="3" @bind-Value="_app.Notes" />
+                    <label class="form-label small fw-semibold" for="app-notes">Notes</label>
+                    <InputTextArea id="app-notes" class="form-control form-control-sm" rows="3" @bind-Value="_app.Notes" />
                 </div>
             </div>
         </div>
@@ -194,7 +206,7 @@ else
         </div>
 
         <div class="d-flex gap-2 mb-4">
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" disabled="@_saving">
                 <i class="bi bi-check-lg me-1"></i>@(_isNew ? "Create Application" : "Save Changes")
             </button>
             <a href="/applications" class="btn btn-secondary">Cancel</a>
@@ -314,7 +326,10 @@ else
 @code {
     [Parameter] public int? Id { get; set; }
 
-    private JobApplication _app = new() { Stage = ApplicationStage.Interested, Priority = Priority.Medium };
+    private JobApplication _app = new();
+    private bool _saving;
+    private static readonly string[] _japaneseLevels = ["JLPT N5", "JLPT N4", "JLPT N3", "JLPT N2", "JLPT N1"];
+    private static readonly string[] _englishLevels = ["A1 (Beginner)", "A2 (Elementary)", "B1 (Intermediate)", "B2 (Upper Intermediate)", "C1 (Advanced)", "C2 (Proficient)"];
     private bool _isNew => !Id.HasValue;
     private bool _pageLoading = true;
     private string? _saveError;
@@ -329,8 +344,12 @@ else
     private bool _reqMandatory = true;
     private string? _reqError;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        _pageLoading = true;
+        _saveError = null;
+        if (_isNew)
+            _app = new JobApplication { AppliedDate = DateTime.Today };
         if (!_isNew && Id.HasValue)
         {
             var loaded = await AppService.GetByIdAsync(Id.Value);
@@ -347,23 +366,30 @@ else
 
     private async Task SaveAsync()
     {
+        if (_saving) return;
+        _saving = true;
         _saveError = null;
         try
         {
             if (_isNew)
             {
-                var created = await AppService.CreateAsync(_app);
-                Nav.NavigateTo($"/applications/{created.Id}/edit");
+                await AppService.CreateAsync(_app);
+                Notifications.Success("Application created successfully.");
+                Nav.NavigateTo("/kanban");
             }
             else
             {
                 await AppService.UpdateAsync(_app);
+                Notifications.Success("Application updated successfully.");
+                Nav.NavigateTo("/kanban");
             }
         }
         catch (Exception ex)
         {
-            _saveError = $"Save failed: {ex.Message}";
+            Logger.LogError(ex, "Application save failed");
+            _saveError = "Unable to save the application. Your entries are preserved. Please try again.";
         }
+        finally { _saving = false; }
     }
 
     private async Task LoadRequirementsAsync()

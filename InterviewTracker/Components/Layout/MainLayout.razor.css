@@ -7,8 +7,8 @@
 
 /* ── Sidebar ── */
 .sidebar {
-    width: 220px;
-    min-width: 220px;
+    width: 232px;
+    min-width: 232px;
     background: #1a1f2e;
     color: #c9d1d9;
     display: flex;
@@ -27,16 +27,18 @@
 
 .sidebar-nav {
     list-style: none;
-    padding: 0.5rem 0;
+    padding: 0.25rem 0.75rem;
     margin: 0;
     flex: 1;
 }
 
-.sidebar-nav li a {
+.sidebar-nav ::deep a {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    padding: 0.6rem 1rem;
+    padding: 0.7rem 0.85rem;
+    margin: 0.2rem 0;
+    border-radius: 8px;
     color: #a0aec0;
     text-decoration: none;
     font-size: 0.9rem;
@@ -44,18 +46,18 @@
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.sidebar-nav li a:hover {
+.sidebar-nav ::deep a:hover {
     background: #2d3348;
     color: #ffffff;
 }
 
-.sidebar-nav li a.active {
-    background: #2d3348;
-    color: #ffffff;
+.sidebar-nav ::deep a.active {
+    background: #273650;
+    color: #c5dcff;
     border-left-color: #4f8ef7;
 }
 
-.sidebar-nav li a i {
+.sidebar-nav ::deep a i {
     font-size: 1rem;
     width: 1.1rem;
     text-align: center;
@@ -71,30 +73,6 @@
 .content-area {
     padding: 1.5rem 2rem;
     min-height: 100%;
-}
-
-/* ── Page header ── */
-.page-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.5rem;
-}
-
-.page-header h1 {
-    font-size: 1.4rem;
-    font-weight: 700;
-    margin: 0;
-    color: #1a1f2e;
-}
-
-/* ── Cards ── */
-.it-card {
-    background: #ffffff;
-    border-radius: 8px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    padding: 1.25rem;
-    margin-bottom: 1rem;
 }
 
 /* ── Blazor error UI ── */
@@ -120,4 +98,18 @@
     position: absolute;
     right: 0.75rem;
     top: 0.5rem;
+}
+
+.sidebar-caption { padding: 1.35rem 1.5rem 0.5rem; font-size: 0.64rem; letter-spacing: 0.12em; color: #8896b0; font-weight: 700; }
+.sidebar-section { padding: 1.25rem 0.9rem 0.4rem; font-size: 0.7rem; color: #8896b0; text-transform: uppercase; letter-spacing: 0.08em; }
+.main-content { min-width: 0; }
+.sidebar-nav ::deep a:focus-visible { outline: 2px solid #8bbaff; outline-offset: 2px; }
+@media (max-width: 760px) {
+    .app-layout { flex-direction: column; }
+    .sidebar { width: 100%; min-width: 0; max-height: 180px; flex-shrink: 0; }
+    .sidebar-header { padding: 0.7rem 1rem; }
+    .sidebar-caption, .sidebar-section { display: none; }
+    .sidebar-nav { display: flex; flex-wrap: wrap; padding: 0.25rem 0.5rem; }
+    .sidebar-nav ::deep a { padding: 0.4rem 0.6rem; font-size: 0.8rem; }
+    .content-area { padding: 1rem; }
 }

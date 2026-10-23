@@ -65,3 +65,6 @@
     border-radius: 6px;
     margin: 4px 8px 8px;
 }
+
+.kanban-column--compact { width: 205px; min-width: 205px; background: #f1f1f4; border: 1px dashed #cbd5e1; }
+.kanban-column--compact .kanban-column__header { background: #e9eaf0; border-radius: 9px 9px 0 0; }

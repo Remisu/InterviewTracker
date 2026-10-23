@@ -3,15 +3,17 @@ using System.ComponentModel.DataAnnotations;
 
 namespace InterviewTracker.Models;
 
-public class JobApplication
+public class JobApplication : IValidatableObject
 {
     public int Id { get; set; }
+
+    public Guid SyncId { get; set; } = Guid.NewGuid();
 
     // Company / Position
     [Required, MaxLength(200)]
     public string JobTitle { get; set; } = string.Empty;
 
-    [Required, MaxLength(200)]
+    [MaxLength(200)]
     public string ClientCompany { get; set; } = string.Empty;
 
     [MaxLength(200)]
@@ -55,7 +57,7 @@ public class JobApplication
     public string? EnglishLevelRequired { get; set; }
 
     // Tracking
-    public ApplicationStage Stage { get; set; } = ApplicationStage.Interested;
+    public ApplicationStage Stage { get; set; } = ApplicationStage.Applied;
     public Priority Priority { get; set; } = Priority.Medium;
 
     public DateTime? AppliedDate { get; set; }
@@ -74,20 +76,27 @@ public class JobApplication
     public ICollection<Interview> Interviews { get; set; } = [];
     public ICollection<ApplicationActivity> Activities { get; set; } = [];
 
-    // Calculated - not persisted
-    public bool IsNoResponse =>
-        LastActivityDate.HasValue
-        && !IsTerminalStage
-        && (DateTime.UtcNow - LastActivityDate.Value).TotalDays >= 12;
+    // UTC activity timestamps; date-only AppliedDate is interpreted as a local calendar date.
+    public bool IsNoResponse => !IsTerminalStage && DaysSinceLastActivity >= 12;
 
-    public bool IsTerminalStage =>
-        Stage is ApplicationStage.Rejected
-            or ApplicationStage.Accepted
-            or ApplicationStage.Withdrawn
-            or ApplicationStage.Offer;
+    public bool IsTerminalStage => Stage is ApplicationStage.Rejected or ApplicationStage.NoResponse
+        or ApplicationStage.Accepted or ApplicationStage.Withdrawn or ApplicationStage.Offer;
 
-    public int? DaysSinceLastActivity =>
-        LastActivityDate.HasValue
-            ? (int)(DateTime.UtcNow - LastActivityDate.Value).TotalDays
-            : null;
+    public int DaysSinceLastActivity => WaitingDays(DateTime.Today);
+
+    public int WaitingDays(DateTime localToday)
+    {
+        var activity = LastActivityDate ?? (AppliedDate.HasValue ? null : UpdatedAt);
+        var date = activity.HasValue
+            ? (activity.Value.Kind == DateTimeKind.Local ? activity.Value : DateTime.SpecifyKind(activity.Value, DateTimeKind.Utc).ToLocalTime()).Date
+            : AppliedDate!.Value.Date;
+        return Math.Max(0, (localToday.Date - date).Days);
+    }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (string.IsNullOrWhiteSpace(ClientCompany) && string.IsNullOrWhiteSpace(RecruitingCompany))
+            yield return new ValidationResult("Enter a Client Company or Recruiting Company (at least one is required).",
+                [nameof(ClientCompany)]);
+    }
 }

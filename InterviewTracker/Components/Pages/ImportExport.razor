@@ -1,0 +1,150 @@
+@page "/sync"
+@implements IAsyncDisposable
+@inject SyncService Sync
+@inject IJSRuntime JS
+@inject ILogger<ImportExport> Logger
+
+<PageTitle>Import / Export — Interview Tracker</PageTitle>
+<div class="page-header"><h1><i class="bi bi-arrow-down-up me-2"></i>Import / Export</h1></div>
+<p class="text-muted">Move your applications between computers using a JSON file. Import merges records and keeps applications that exist only on this computer.</p>
+
+@if (_error is not null) { <div class="alert alert-danger" role="alert">@_error</div> }
+@if (_message is not null) { <div class="alert alert-success" role="status">@_message</div> }
+
+<div class="row g-3 mb-3">
+    <div class="col-md-5">
+        <div class="it-card h-100">
+            <h2 class="h6 fw-bold">1. Export from this computer</h2>
+            <p class="text-muted small">Includes applications, contacts, interviews, questions, activity history, and required technologies. Keep this file private: it contains your application information.</p>
+            <button class="btn btn-outline-primary" disabled="@_busy" @onclick="ExportAsync"><i class="bi bi-download me-2"></i>Download JSON</button>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="it-card h-100">
+            <h2 class="h6 fw-bold">2. Preview an import</h2>
+            <p class="text-muted small">Select an InterviewTracker JSON export (up to 20 MB). Nothing is saved until you confirm the merge.</p>
+            <label for="sync-file" class="form-label small">Export file</label>
+            <InputFile @key="_fileInputVersion" id="sync-file" class="form-control" accept=".json,application/json" OnChange="SelectFileAsync" disabled="@_busy" />
+        </div>
+    </div>
+</div>
+
+@if (_busy) { <p role="status"><span class="spinner-border spinner-border-sm me-2"></span>Processing…</p> }
+@if (_preview is not null)
+{
+    <div class="it-card">
+        <h2 class="h6 fw-bold">3. Review and confirm</h2>
+        <p class="small text-muted">@_fileName · Exported @_preview.Document.ExportedAtUtc.ToLocalTime().ToString("g") · Source @_preview.Document.SourceInstallationId</p>
+        <div class="d-flex flex-wrap gap-2 mb-3" role="status">
+            <span class="badge bg-success">@_preview.Count(MergeAction.Add) added</span>
+            <span class="badge bg-primary">@_preview.Count(MergeAction.Update) updated</span>
+            <span class="badge bg-secondary">@_preview.Count(MergeAction.Unchanged) unchanged</span>
+            <span class="badge bg-warning text-dark">@_preview.Count(MergeAction.Conflict) conflicts</span>
+        </div>
+        <p class="small">Newer imported versions update the application and its related data together. Older imported versions are skipped. Equal timestamps with different content need your decision. Deletions of whole applications are not synchronized.</p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Application</th><th>Local modified</th><th>Imported modified</th><th>Result</th></tr></thead>
+                <tbody>
+                @foreach (var item in _preview.Items)
+                {
+                    <tr @key="item.Imported.Application.SyncId">
+                        <td>
+                            <strong>@item.Imported.Application.JobTitle</strong>
+                            <div class="small text-muted">@(string.IsNullOrWhiteSpace(item.Imported.Application.ClientCompany) ? item.Imported.Application.RecruitingCompany : item.Imported.Application.ClientCompany)</div>
+                            <div class="small text-muted">@EnumHelper.DisplayName(item.Imported.Application.Stage)</div>
+                        </td>
+                        <td class="small">@(item.Local?.Application.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fffffff") ?? "—")</td>
+                        <td class="small">@item.Imported.Application.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fffffff")</td>
+                        <td>
+                            @if (item.Action == MergeAction.Conflict)
+                            {
+                                <select class="form-select form-select-sm" aria-label="@($"Resolve conflict for {item.Imported.Application.JobTitle}")" @bind="item.Resolution" disabled="@_busy">
+                                    <option value="@ConflictResolution.Unresolved">Choose a version…</option>
+                                    <option value="@ConflictResolution.KeepLocal">Keep local version</option>
+                                    <option value="@ConflictResolution.UseImported">Use imported version</option>
+                                </select>
+                                <details class="mt-2 small">
+                                    <summary>Compare full records</summary>
+                                    <strong>Local</strong><pre class="sync-record">@System.Text.Json.JsonSerializer.Serialize(item.Local, SyncService.JsonOptions)</pre>
+                                    <strong>Imported</strong><pre class="sync-record">@System.Text.Json.JsonSerializer.Serialize(item.Imported, SyncService.JsonOptions)</pre>
+                                </details>
+                            }
+                            else { <span>@item.Action</span> }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        @if (_preview.Items.Any(i => i.Action == MergeAction.Conflict && i.Resolution == ConflictResolution.Unresolved))
+        { <p class="small text-warning-emphasis">Choose a version for every conflict to enable the merge.</p> }
+        <button class="btn btn-primary" disabled="@(_busy || _preview.Items.Any(i => i.Action == MergeAction.Conflict && i.Resolution == ConflictResolution.Unresolved))" @onclick="MergeAsync">Confirm merge</button>
+        <button class="btn btn-outline-secondary ms-2" disabled="@_busy" @onclick="() => _preview = null">Cancel</button>
+    </div>
+}
+
+@code {
+    private SyncPreview? _preview;
+    private string? _error, _message, _fileName;
+    private bool _busy;
+    private int _fileInputVersion;
+    private IJSObjectReference? _module;
+
+    private async Task ExportAsync()
+    {
+        if (_busy) return;
+        _busy = true; _error = null; _message = null;
+        try
+        {
+            var json = await Sync.ExportAsync();
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./sync.js");
+            await _module.InvokeVoidAsync("download", $"interviewtracker-{DateTime.Now:yyyyMMdd-HHmmss}.json", json);
+            _message = "Export ready. Transfer the downloaded JSON file to your other computer and preview its import there.";
+        }
+        catch (Exception ex) { ShowError(ex, "Unable to export data. Please try again."); }
+        finally { _busy = false; }
+    }
+
+    private async Task SelectFileAsync(InputFileChangeEventArgs args)
+    {
+        if (_busy) return;
+        _busy = true; _error = null; _message = null; _preview = null;
+        try
+        {
+            _fileName = args.File.Name;
+            await using var stream = args.File.OpenReadStream(SyncService.MaxFileBytes);
+            using var reader = new StreamReader(stream);
+            _preview = await Sync.PreviewAsync(await reader.ReadToEndAsync());
+        }
+        catch (Exception ex) { ShowError(ex, "Unable to read this file. Choose a valid InterviewTracker JSON export (up to 20 MB)."); }
+        // Recreate the file input after streaming so selecting the same file again fires change.
+        finally { _busy = false; _fileInputVersion++; }
+    }
+
+    private async Task MergeAsync()
+    {
+        if (_busy || _preview is null) return;
+        _busy = true; _error = null; _message = null;
+        try
+        {
+            var result = await Sync.MergeAsync(_preview);
+            _message = $"Merge completed: {result.Added} added, {result.Updated} updated, {result.Unchanged} unchanged. Other local applications were preserved.";
+            _preview = null;
+        }
+        catch (Exception ex) { ShowError(ex, "Unable to merge. No import changes were saved. Please try again."); }
+        finally { _busy = false; }
+    }
+
+    private void ShowError(Exception ex, string fallback)
+    {
+        Logger.LogError(ex, "File synchronization failed");
+        _error = ex is System.ComponentModel.DataAnnotations.ValidationException ? ex.Message : fallback;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+            try { await _module.DisposeAsync(); } catch (JSDisconnectedException) { }
+    }
+}

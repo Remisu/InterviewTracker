@@ -6,13 +6,16 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // SQLite database — use factory for safe Blazor Server scoped access
-var dbPath = Path.Combine(builder.Environment.ContentRootPath, "interviewtracker.db");
+var dbPath = builder.Configuration["DatabasePath"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "interviewtracker.db");
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
 // Application services
 builder.Services.AddScoped<TechnologyService>();
 builder.Services.AddScoped<ApplicationService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<SyncService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<JobMatchService>();
 builder.Services.AddScoped<ContactService>();

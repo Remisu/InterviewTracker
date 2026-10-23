@@ -25,12 +25,12 @@ public class ActivityService(IDbContextFactory<AppDbContext> factory)
     public async Task<ApplicationActivity> CreateAsync(ApplicationActivity activity)
     {
         await using var db = await factory.CreateDbContextAsync();
+        activity.ActivityDate = activity.ActivityDate.ToUniversalTime();
         activity.CreatedAt   = DateTime.UtcNow;
         activity.UpdatedAt   = DateTime.UtcNow;
         activity.IsManual    = true;
         db.ApplicationActivities.Add(activity);
         await db.SaveChangesAsync();
-        await TouchApplicationAsync(db, activity.JobApplicationId);
         return activity;
     }
 
@@ -43,13 +43,12 @@ public class ActivityService(IDbContextFactory<AppDbContext> factory)
         existing.ActivityType  = activity.ActivityType;
         existing.Title         = activity.Title;
         existing.Description   = activity.Description;
-        existing.ActivityDate  = activity.ActivityDate;
+        existing.ActivityDate  = activity.ActivityDate.ToUniversalTime();
         existing.ContactId     = activity.ContactId;
         existing.FollowUpDate  = activity.FollowUpDate;
         existing.UpdatedAt     = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
-        await TouchApplicationAsync(db, existing.JobApplicationId);
     }
 
     public async Task DeleteAsync(int id)
@@ -60,7 +59,6 @@ public class ActivityService(IDbContextFactory<AppDbContext> factory)
         var appId = activity.JobApplicationId;
         db.ApplicationActivities.Remove(activity);
         await db.SaveChangesAsync();
-        await TouchApplicationAsync(db, appId);
     }
 
     /// <summary>Creates a system-generated (non-manual) activity entry.</summary>
@@ -87,17 +85,6 @@ public class ActivityService(IDbContextFactory<AppDbContext> factory)
             UpdatedAt        = DateTime.UtcNow,
         });
         await db.SaveChangesAsync();
-        await TouchApplicationAsync(db, appId);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static async Task TouchApplicationAsync(AppDbContext db, int appId)
-    {
-        var app = await db.JobApplications.FindAsync(appId);
-        if (app is null) return;
-        app.LastActivityDate = DateTime.UtcNow;
-        app.UpdatedAt        = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-    }
 }

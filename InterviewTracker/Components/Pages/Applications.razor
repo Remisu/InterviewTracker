@@ -37,7 +37,7 @@
             </select>
         </div>
         <div class="col-md-2">
-            <label class="form-label small fw-semibold mb-1">Priority</label>
+            <label class="form-label small fw-semibold mb-1">Interest Level</label>
             <select class="form-select form-select-sm" @onchange="OnPriorityChange">
                 <option value="">All</option>
                 @foreach (var p in EnumHelper.AllPriorities())
@@ -122,7 +122,7 @@ else
                             Match @SortIcon("match")
                         </th>
                         <th @onclick='() => Sort("priority")' role="button" class="sortable">
-                            Priority @SortIcon("priority")
+                            Interest Level @SortIcon("priority")
                         </th>
                         <th @onclick='() => Sort("applied")' role="button" class="sortable">
                             Applied @SortIcon("applied")
@@ -150,14 +150,9 @@ else
                             <td>@app.ClientCompany</td>
                             <td class="small text-muted">@app.RecruitingCompany</td>
                             <td>
+                                <span class="@EnumHelper.BadgeClass(app.Stage)">@EnumHelper.DisplayName(app.Stage)</span>
                                 @if (app.IsNoResponse)
-                                {
-                                    <span class="badge bg-secondary">No Response</span>
-                                }
-                                else
-                                {
-                                    <span class="@EnumHelper.BadgeClass(app.Stage)">@EnumHelper.DisplayName(app.Stage)</span>
-                                }
+                                { <div class="small text-muted">Awaiting reply · 12+ days</div> }
                             </td>
                             <td class="small">
                                 @app.City@(app.City != null && app.Country != null ? ", " : "")@app.Country

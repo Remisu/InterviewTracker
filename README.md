@@ -6,7 +6,7 @@
 
 **InterviewTracker** was created to solve a problem I encountered during my own job search: keeping track of multiple applications, recruiters, interviews, follow-ups, job requirements and application statuses across different platforms.
 
-Instead of managing everything through spreadsheets and notes, InterviewTracker provides a centralized dashboard where the entire recruitment pipeline can be tracked.
+Instead of managing everything through spreadsheets and notes, InterviewTracker provides a centralized workspace where the entire recruitment pipeline can be tracked.
 
 The project is also an opportunity to explore modern **.NET development with Blazor, Entity Framework Core and SQLite** while building a tool based on a real-world use case.
 
@@ -25,20 +25,22 @@ Manage job opportunities with information such as:
 - Remote / Hybrid / On-site work mode
 - Employment type
 - Salary range and currency
-- Priority
+- Interest level
 - Application status
 
 ### Application Pipeline
 
 Track applications throughout the recruitment lifecycle:
 
-`Interested → Applied → Interview → Offer → Accepted`
+`Applied / Waiting → Recruiter Screening → Client Interview → Technical Assessment → Final Interview`
 
 Applications can also be marked as:
 
-`Rejected` · `Withdrawn` · `No Response`
+`Rejected` · `No Response`
 
-The system automatically identifies applications with **no activity for 12 days**, helping highlight opportunities that may require follow-up.
+Active cards show local calendar days since meaningful activity, longest waiting first. After 12 days they receive an awaiting-reply highlight. This does not change their stage. Rejected and manually marked No Response cards have compact terminal columns and can be restored to an active stage.
+
+Legacy Applied and Waiting values share the first column. Interested, Interview, Offer, Accepted, and Withdrawn retain their original values in a **Legacy stages · review** area until you deliberately choose a current stage. No migration guesses an ambiguous stage.
 
 ### Application Timeline
 
@@ -168,6 +170,27 @@ dotnet ef database update --project InterviewTracker
 dotnet run --project InterviewTracker
 ```
 
+## File synchronization and database compatibility
+
+Use **Import / Export** to download a version 1 JSON export, transfer it to another computer, and preview its import. Confirm the merge after choosing a local or imported version for every equal-timestamp conflict. Newer imported records update the complete application aggregate; older versions are skipped and destination-only applications stay intact. Whole-application deletions do not propagate. Conflicts are resolved with a new UTC modification timestamp without changing the activity clock. A changed local record invalidates the preview so you can review it again.
+
+Exports contain stable application GUIDs, UTC creation/modification timestamps, contacts, interviews and questions, activity history, and required technologies. Numeric IDs inside each application are portable references and are remapped on import. Shared technologies are matched by exact name; existing local catalog metadata and the local skill profile are preserved. Secrets and machine settings are excluded. Limits: 20 MB and 10,000 applications per file.
+
+Migration `20261021134807_SyncIdentity` runs automatically at startup. It adds a unique `SyncId` to every application, creates an installation identifier, and initializes missing activity timestamps from existing update dates. It preserves application IDs, relationships, stage integers, priority values, and existing creation/modification dates. Language fields already existed, so their data and custom text values remain compatible with the new selectors. Back up your database before upgrading either computer.
+
+For the first transfer, upgrade the source computer and export from it, then import into a fresh destination installation. Two independently upgraded copies of an old database receive different GUIDs for their pre-sync records: they cannot be deduplicated safely by company, title, or numeric ID. Reconcile pre-existing independent copies before starting synchronization; future exports preserve the GUIDs. The installation identifier belongs to the database, so copying the complete database also copies that identifier.
+
+The SQLite path defaults to `InterviewTracker/interviewtracker.db`. Tests or isolated runs can override it with `--DatabasePath /absolute/path/test.db`.
+
+## Validation
+
+```bash
+dotnet build InterviewTracker.slnx
+dotnet test InterviewTracker.slnx
+```
+
+The 33 regression and component tests use temporary SQLite databases and bUnit. They exercise drag-and-drop into terminal stages and restoration, form defaults and manual dates, save failures and retries, post-navigation notifications, the import preview/confirmation UI, migrations, company validation, language persistence, meaningful activity, calendar-day ordering, status transitions, idempotent merges, UTC version comparisons, conflict resolution, stale previews, relationship remapping, and transactional rollback.
+
 ---
 
 ## Motivation
@@ -194,7 +217,6 @@ Building InterviewTracker allowed me to turn that real-world problem into a prac
 
 Planned improvements include:
 
-- [ ] Dashboard with job search statistics
 - [ ] Advanced filtering and search
 - [ ] Application analytics
 - [ ] Interview calendar
@@ -203,7 +225,7 @@ Planned improvements include:
 - [ ] CV / job description matching
 - [ ] Technology match scoring
 - [ ] Import job information from URLs
-- [ ] Export application history
+- [x] File-based application import / export
 - [ ] Authentication and multiple profiles
 - [ ] Deployment and online demo
 

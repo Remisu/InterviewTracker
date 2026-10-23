@@ -9,7 +9,7 @@
     @if (App.IsNoResponse)
     {
         <div class="kanban-card__no-response-bar">
-            <i class="bi bi-clock me-1"></i>No response · @App.DaysSinceLastActivity d
+            <i class="bi bi-clock me-1"></i>Awaiting reply · @App.DaysSinceLastActivity days
         </div>
     }
 
@@ -32,7 +32,7 @@
                 <li>
                     <span class="dropdown-item-text text-muted small px-3">Move to stage</span>
                 </li>
-                @foreach (var stage in EnumHelper.AllStages().Where(s => s != App.Stage))
+                @foreach (var stage in ApplicationWorkflow.Stages.Where(s => s != App.Stage))
                 {
                     var s = stage;
                     <li>
@@ -46,12 +46,17 @@
         </div>
     </div>
 
+    @if (App.Stage == ApplicationStage.NoResponse)
+    {
+        <div class="small text-muted mb-1">Manually marked · No Response</div>
+    }
+
     @* ── Company ── *@
     <div class="kanban-card__company">
-        @if (App.RecruitingCompany is not null)
+        @if (!string.IsNullOrWhiteSpace(App.RecruitingCompany))
         {
             <span class="text-muted">@App.RecruitingCompany</span>
-            <span class="text-muted"> › </span>
+            @if (!string.IsNullOrWhiteSpace(App.ClientCompany)) { <span class="text-muted"> › </span> }
         }
         <span>@App.ClientCompany</span>
     </div>
@@ -98,7 +103,7 @@
     @* ── Footer ── *@
     <div class="kanban-card__footer mt-2">
         @* Priority *@
-        <span class="@EnumHelper.BadgeClass(App.Priority)" style="font-size:0.65rem">
+        <span class="@EnumHelper.BadgeClass(App.Priority)" style="font-size:0.65rem" title="Interest Level">
             @EnumHelper.DisplayName(App.Priority)
         </span>
 
@@ -119,10 +124,10 @@
         }
 
         @* Last activity *@
-        @if (App.DaysSinceLastActivity is int days && !App.IsNoResponse)
+        @if (!App.IsTerminalStage)
         {
             <span class="text-muted" style="font-size:0.7rem">
-                @(days == 0 ? "Today" : days == 1 ? "1d ago" : $"{days}d ago")
+                @(App.DaysSinceLastActivity == 0 ? "Updated today" : App.DaysSinceLastActivity == 1 ? "1 day without response" : $"{App.DaysSinceLastActivity} days without response")
             </span>
         }
     </div>
@@ -131,6 +136,7 @@
 @code {
     [Parameter, EditorRequired] public JobApplication App       { get; set; } = null!;
     [Parameter] public JobMatchResult?               MatchResult { get; set; }
+    [Parameter] public EventCallback OnDragEnded { get; set; }
     [Parameter] public EventCallback<int>            OnDragStarted { get; set; }
     [Parameter] public EventCallback<ApplicationStage> OnStageMoved { get; set; }
 
@@ -142,7 +148,11 @@
         await OnDragStarted.InvokeAsync(App.Id);
     }
 
-    private void OnDragEnd(DragEventArgs e) => IsDragging = false;
+    private async Task OnDragEnd(DragEventArgs e)
+    {
+        IsDragging = false;
+        await OnDragEnded.InvokeAsync();
+    }
 
     private async Task MoveToStage(ApplicationStage stage)
         => await OnStageMoved.InvokeAsync(stage);

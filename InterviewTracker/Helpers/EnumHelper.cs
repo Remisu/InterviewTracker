@@ -9,7 +9,7 @@ public static class EnumHelper
     public static string DisplayName(ApplicationStage stage) => stage switch
     {
         ApplicationStage.Interested         => "Interested",
-        ApplicationStage.Applied            => "Applied",
+        ApplicationStage.Applied            => "Applied / Waiting",
         ApplicationStage.Waiting            => "Waiting",
         ApplicationStage.RecruiterScreening => "Recruiter Screening",
         ApplicationStage.Interview          => "Interview",

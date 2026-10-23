@@ -321,6 +321,9 @@ namespace InterviewTracker.Migrations
                     b.Property<int>("Stage")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("SyncId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -331,6 +334,9 @@ namespace InterviewTracker.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SyncId")
+                        .IsUnique();
 
                     b.ToTable("JobApplications");
                 });
@@ -400,6 +406,20 @@ namespace InterviewTracker.Migrations
                         .IsUnique();
 
                     b.ToTable("ProfileTechnologies");
+                });
+
+            modelBuilder.Entity("InterviewTracker.Models.SyncInstallation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("InstallationId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SyncInstallations");
                 });
 
             modelBuilder.Entity("InterviewTracker.Models.Technology", b =>

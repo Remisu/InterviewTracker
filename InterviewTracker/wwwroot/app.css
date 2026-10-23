@@ -123,3 +123,31 @@ th.sortable:hover {
     background: #cbd5e0;
     border-radius: 3px;
 }
+
+.sync-record { max-width: 38rem; max-height: 20rem; white-space: pre-wrap; overflow-wrap: anywhere; background: #f8fafc; padding: 1rem; border-radius: 6px; }
+.page-header { flex-wrap: wrap; gap: 0.75rem; }
+
+/* Shared page surfaces live globally because routed pages have their own CSS scopes. */
+/* ── Page header ── */
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0;
+    color: #1a1f2e;
+}
+
+/* ── Cards ── */
+.it-card {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}

@@ -2,6 +2,7 @@ using InterviewTracker.Data;
 using InterviewTracker.Models;
 using InterviewTracker.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace InterviewTracker.Services;
 
@@ -79,25 +80,28 @@ public class ApplicationService(IDbContextFactory<AppDbContext> factory)
 
     public async Task<JobApplication> CreateAsync(JobApplication app)
     {
+        Validator.ValidateObject(app, new ValidationContext(app), validateAllProperties: true);
         await using var db = await factory.CreateDbContextAsync();
-        app.CreatedAt = DateTime.UtcNow;
-        app.UpdatedAt = DateTime.UtcNow;
-        app.LastActivityDate = DateTime.UtcNow;
+        app.Id = 0;
+        app.CreatedAt = app.UpdatedAt = DateTime.UtcNow;
+        app.LastActivityDate = app.AppliedDate?.Date.ToUniversalTime() ?? DateTime.UtcNow;
+        app.Activities.Add(new ApplicationActivity
+        {
+            ActivityType = ActivityType.Applied, Title = "Applied",
+            ActivityDate = app.LastActivityDate.Value, IsManual = false
+        });
         db.JobApplications.Add(app);
-        await db.SaveChangesAsync();
-
-        // Auto activity: Applied
-        if (app.Stage >= ApplicationStage.Applied)
-            await AddAutoActivityAsync(db, app.Id, ActivityType.Applied, "Applied", null);
-
+        try { await db.SaveChangesAsync(); }
+        catch { app.Activities.Clear(); app.Id = 0; throw; }
         return app;
     }
 
     public async Task UpdateAsync(JobApplication app)
     {
+        Validator.ValidateObject(app, new ValidationContext(app), validateAllProperties: true);
         await using var db = await factory.CreateDbContextAsync();
-        var existing = await db.JobApplications.FindAsync(app.Id);
-        if (existing is null) return;
+        var existing = await db.JobApplications.FindAsync(app.Id)
+            ?? throw new InvalidOperationException("This application no longer exists. Refresh and try again.");
 
         var oldStage = existing.Stage;
 
@@ -123,12 +127,11 @@ public class ApplicationService(IDbContextFactory<AppDbContext> factory)
         existing.AppliedDate = app.AppliedDate;
         existing.NextFollowUpDate = app.NextFollowUpDate;
         existing.Notes = app.Notes;
-        existing.UpdatedAt = DateTime.UtcNow;
 
         if (app.Stage != oldStage)
         {
             existing.LastActivityDate = DateTime.UtcNow;
-            await AddAutoActivityAsync(db, app.Id, ActivityType.StatusChanged,
+            AddAutoActivity(db, app.Id, ActivityType.StatusChanged,
                 $"Stage changed to {EnumDisplayName(app.Stage)}", null);
         }
 
@@ -139,11 +142,13 @@ public class ApplicationService(IDbContextFactory<AppDbContext> factory)
     {
         await using var db = await factory.CreateDbContextAsync();
         var app = await db.JobApplications.FindAsync(id);
-        if (app is null) return;
+        if (!Helpers.ApplicationWorkflow.Stages.Contains(stage))
+            throw new ValidationException("Choose a stage from the current workflow.");
+        if (app is null) throw new InvalidOperationException("This application no longer exists.");
+        if (app.Stage == stage) return;
         app.Stage = stage;
         app.LastActivityDate = DateTime.UtcNow;
-        app.UpdatedAt = DateTime.UtcNow;
-        await AddAutoActivityAsync(db, id, ActivityType.StatusChanged,
+        AddAutoActivity(db, id, ActivityType.StatusChanged,
             $"Stage changed to {EnumDisplayName(stage)}", null);
         await db.SaveChangesAsync();
     }
@@ -196,7 +201,7 @@ public class ApplicationService(IDbContextFactory<AppDbContext> factory)
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static async Task AddAutoActivityAsync(AppDbContext db, int appId, ActivityType type, string title, string? description)
+    private static void AddAutoActivity(AppDbContext db, int appId, ActivityType type, string title, string? description)
     {
         db.ApplicationActivities.Add(new ApplicationActivity
         {
@@ -207,7 +212,6 @@ public class ApplicationService(IDbContextFactory<AppDbContext> factory)
             ActivityDate     = DateTime.UtcNow,
             IsManual         = false
         });
-        await db.SaveChangesAsync();
     }
 
     private static string EnumDisplayName(ApplicationStage stage) =>

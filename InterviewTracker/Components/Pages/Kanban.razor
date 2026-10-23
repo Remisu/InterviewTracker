@@ -1,4 +1,8 @@
+@page "/"
 @page "/kanban"
+@implements IDisposable
+@inject NotificationService Notifications
+@inject ILogger<Kanban> Logger
 @inject ApplicationService AppService
 @inject JobMatchService MatchService
 @inject TechnologyService TechService
@@ -23,6 +27,16 @@
     </div>
 </div>
 
+@if (_success is not null)
+{
+    <div class="alert alert-success" role="status">@_success</div>
+}
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+<p class="text-muted small">Longest waiting first · Drag a card or use its menu to change stage.</p>
+
 @* ── Filter panel ── *@
 @if (_filtersVisible)
 {
@@ -34,7 +48,7 @@
                        @bind="_filterText" @bind:after="ApplyFilters" />
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold mb-1">Priority</label>
+                <label class="form-label small fw-semibold mb-1">Interest Level</label>
                 <select class="form-select form-select-sm" @onchange="OnPriorityChange">
                     <option value="">All</option>
                     @foreach (var p in EnumHelper.AllPriorities())
@@ -67,7 +81,7 @@
                 <div class="form-check mb-1">
                     <input class="form-check-input" type="checkbox" id="noResponseOnly"
                            @bind="_filterNoResponse" @bind:after="ApplyFilters" />
-                    <label class="form-check-label small" for="noResponseOnly">No Response only</label>
+                    <label class="form-check-label small" for="noResponseOnly">Awaiting reply · 12+ days</label>
                 </div>
             </div>
         </div>
@@ -99,37 +113,31 @@ else
             <KanbanColumn Title="@col.Label"
                           Count="@colCards.Count"
                           AccentColor="@colAccent"
+                          Compact="@(colStage is ApplicationStage.Rejected or ApplicationStage.NoResponse)"
                           OnDropped="() => OnDroppedAsync(colStage)">
                 @foreach (var app in colCards)
                 {
                     var appRef = app;
                     _matchScores.TryGetValue(app.Id, out var mr);
-                    <KanbanCard App="appRef"
+                    <KanbanCard @key="appRef.Id" App="appRef"
                                 MatchResult="mr"
-                                OnDragStarted="OnCardDragStarted"
+                                OnDragStarted="OnCardDragStarted" OnDragEnded="OnCardDragEnded"
                                 OnStageMoved="stage => OnCardStageMoved(appRef.Id, stage)" />
                 }
             </KanbanColumn>
         }
 
-        @* ── Virtual No Response column ── *@
-        @{
-            var noResponseCards = _filtered.Where(a => a.IsNoResponse).ToList();
-        }
-        @if (noResponseCards.Count > 0 || _filterNoResponse)
+        @if (_filtered.Any(a => ApplicationWorkflow.NeedsReview(a.Stage)))
         {
-            <KanbanColumn Title="No Response"
-                          Count="@noResponseCards.Count"
-                          AccentColor="#ef4444"
-                          OnDropped="() => Task.CompletedTask">
-                @foreach (var app in noResponseCards)
+            var legacyCards = ApplicationWorkflow.Order(_filtered.Where(a => ApplicationWorkflow.NeedsReview(a.Stage))).ToList();
+            <KanbanColumn Title="Legacy stages · review" Count="legacyCards.Count" AccentColor="#64748b">
+                <p class="small text-muted px-2">Original stages preserved. Choose a new stage from each card's menu.</p>
+                @foreach (var app in legacyCards)
                 {
-                    var appRef = app;
-                    _matchScores.TryGetValue(app.Id, out var mr);
-                    <KanbanCard App="appRef"
-                                MatchResult="mr"
-                                OnDragStarted="OnCardDragStarted"
-                                OnStageMoved="stage => OnCardStageMoved(appRef.Id, stage)" />
+                    <div class="small text-muted px-2">@EnumHelper.DisplayName(app.Stage)</div>
+                    <KanbanCard @key="app.Id" App="app" MatchResult="_matchScores.GetValueOrDefault(app.Id)"
+                                OnDragStarted="OnCardDragStarted" OnDragEnded="OnCardDragEnded"
+                                OnStageMoved="stage => OnCardStageMoved(app.Id, stage)" />
                 }
             </KanbanColumn>
         }
@@ -141,7 +149,7 @@ else
         @if (_filtered.Any(a => a.IsNoResponse))
         {
             <span class="ms-3 text-danger">
-                <i class="bi bi-clock me-1"></i>@noResponseCards.Count with no response
+                <i class="bi bi-clock me-1"></i>@_filtered.Count(a => a.IsNoResponse) awaiting reply for 12+ days
             </span>
         }
     </div>
@@ -151,21 +159,12 @@ else
     // ── Column definitions ────────────────────────────────────────────────────
     private record ColumnDef(ApplicationStage Stage, string Label);
 
-    private static readonly ColumnDef[] _columns =
-    [
-        new(ApplicationStage.Interested,          "Interested"),
-        new(ApplicationStage.Applied,             "Applied"),
-        new(ApplicationStage.Waiting,             "Waiting"),
-        new(ApplicationStage.RecruiterScreening,  "Recruiter Screening"),
-        new(ApplicationStage.Interview,           "Interview"),
-        new(ApplicationStage.TechnicalAssessment, "Technical Assessment"),
-        new(ApplicationStage.ClientInterview,     "Client Interview"),
-        new(ApplicationStage.FinalInterview,      "Final Interview"),
-        new(ApplicationStage.Offer,               "Offer"),
-        new(ApplicationStage.Accepted,            "Accepted"),
-        new(ApplicationStage.Rejected,            "Rejected"),
-        new(ApplicationStage.Withdrawn,           "Withdrawn"),
-    ];
+    private static readonly ColumnDef[] _columns = ApplicationWorkflow.Stages
+        .Select(s => new ColumnDef(s, EnumHelper.DisplayName(s))).ToArray();
+
+    private string? _success;
+    private string? _error;
+    private readonly CancellationTokenSource _refreshCancellation = new();
 
     // ── State ─────────────────────────────────────────────────────────────────
     private List<JobApplication> _all       = [];
@@ -195,8 +194,19 @@ else
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
-        _allTechs = await TechService.GetAllAsync();
-        await LoadAsync();
+        _success = Notifications.Take();
+        try
+        {
+            _allTechs = await TechService.GetAllAsync();
+            await LoadAsync();
+            _ = RefreshDatesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Kanban loading failed");
+            _error = "Unable to load the board. Please refresh to try again.";
+            _loading = false;
+        }
     }
 
     private async Task LoadAsync()
@@ -271,12 +281,21 @@ else
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    private List<JobApplication> CardsFor(ApplicationStage stage)
-        => _filtered
-            .Where(a => a.Stage == stage)
-            .OrderByDescending(a => a.Priority)
-            .ThenBy(a => a.LastActivityDate)
-            .ToList();
+    private List<JobApplication> CardsFor(ApplicationStage stage) =>
+        ApplicationWorkflow.Order(_filtered.Where(a => ApplicationWorkflow.BoardStage(a.Stage) == stage)).ToList();
+
+    private async Task RefreshDatesAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_refreshCancellation.Token))
+                await InvokeAsync(() => { ApplyFilters(); StateHasChanged(); });
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose() { _refreshCancellation.Cancel(); _refreshCancellation.Dispose(); }
 
     private static string ColumnAccent(ApplicationStage stage) => stage switch
     {
@@ -298,23 +317,28 @@ else
 
     // ── Drag & Drop ───────────────────────────────────────────────────────────
     private void OnCardDragStarted(int appId) => _draggingAppId = appId;
+    private void OnCardDragEnded() => _draggingAppId = 0;
 
     private async Task OnDroppedAsync(ApplicationStage targetStage)
     {
-        if (_draggingAppId == 0) return;
-
-        var app = _all.FirstOrDefault(a => a.Id == _draggingAppId);
-        if (app is null || app.Stage == targetStage) return;
-
-        await AppService.UpdateStageAsync(_draggingAppId, targetStage);
+        var id = _draggingAppId;
         _draggingAppId = 0;
-        await LoadAsync();
+        if (id != 0) await OnCardStageMoved(id, targetStage);
     }
 
     private async Task OnCardStageMoved(int appId, ApplicationStage stage)
     {
-        await AppService.UpdateStageAsync(appId, stage);
-        await LoadAsync();
+        _error = null;
+        try
+        {
+            await AppService.UpdateStageAsync(appId, stage);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Stage change failed for application {Id}", appId);
+            _error = "Unable to move the application. Please try again.";
+            _loading = false;
+        }
     }
 }
-
