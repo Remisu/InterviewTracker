@@ -152,23 +152,19 @@ git clone https://github.com/Remisu/InterviewTracker.git
 cd InterviewTracker
 ```
 
-### Restore dependencies
+### Run from VS Code
 
-```bash
-dotnet restore
-```
+Open the repository root in VS Code. From the Command Palette (`Cmd+Shift+P` on macOS or `Ctrl+Shift+P` on Windows/Linux), select **Tasks: Run Task**, then **Iniciar InterviewTracker**.
 
-### Apply database migrations
+The task starts the app with hot reload and opens `http://localhost:5000` in your browser. To stop the app, use **Tasks: Terminate Task**.
 
-```bash
-dotnet ef database update --project InterviewTracker
-```
-
-### Run the application
+### Run from a terminal
 
 ```bash
 dotnet run --project InterviewTracker
 ```
+
+Both options restore dependencies as needed and apply SQLite migrations at startup.
 
 ## File synchronization and database compatibility
 

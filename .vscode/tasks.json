@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Iniciar InterviewTracker",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "watch",
+        "--project",
+        "InterviewTracker/InterviewTracker.csproj",
+        "--launch-profile",
+        "http"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "env": { "DOTNET_WATCH_SUPPRESS_STATIC_FILE_HANDLING": "1" }
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}
